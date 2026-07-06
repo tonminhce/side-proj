@@ -1,0 +1,106 @@
+# generated: 2026-07-06
+# last_updated: 2026-07-06
+# project: side-project
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+#
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status: backlog | in-progress | done
+# Story Status: backlog | ready-for-dev | in-progress | review | done
+# Retrospective Status: optional | done
+#
+# KEBAB-CASE KEY POLICY:
+# Story keys preserve the FULL kebab-case of the title (no truncation).
+# Long keys are allowed; uniqueness is what matters.
+
+generated: 2026-07-06
+last_updated: 2026-07-06
+project: side-project
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-0: backlog  # Epic 0: Foundation
+  0-1-fix-util-parent-pom-blocker-r-01: backlog
+  0-2-bootstrap-multi-module-maven-monorepo: backlog
+  0-3-dev-docker-compose-postgres-kafka-kraft-es-redis-apicurio-minio: backlog
+  0-4-ci-scaffold-github-actions-archunit-spotless-prettier: backlog
+  0-5-snowflake-strict-mode-r-22: backlog
+  epic-0-retrospective: optional
+  epic-1: backlog  # Epic 1: Browse Catalog and Manage Inventory
+  1-1-catalogservice-maven-module-bootstrap-per-service-postgres-db: backlog
+  1-2-product-aggregate-variant-graph-fr-1-fr-2-fr-4: backlog
+  1-3-catalog-change-events-with-avro-strict-compat-fr-5: backlog
+  1-4-admin-ui-catalog-read-view-fr-6-fr-7: backlog
+  1-5-inventoryservice-per-warehouse-ledger-fr-8: backlog
+  1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause: backlog
+  1-7-multi-warehouse-per-variant-stock-fr-10: backlog
+  1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: backlog
+  epic-1-retrospective: optional
+  epic-2: backlog  # Epic 2: Add to Cart and Checkout
+  2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: backlog
+  2-2-cart-auto-expire-line-added-event-fr-17-fr-18: backlog
+  2-3-checkoutservice-single-page-checkout-api-fr-19-fr-21: backlog
+  2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: backlog
+  2-5-saga-orchestrator-spring-modulith-outbox-state-machine-fr-22-fr-23-q1-binding: backlog
+  epic-2-retrospective: optional
+  epic-3: backlog  # Epic 3: Pay Securely
+  3-1-paymentservice-stable-idempotency-key-fr-25-solves-di-02-root-cause: backlog
+  3-2-stripe-webhook-dedup-fr-26-solves-r-03: backlog
+  3-3-stripe-elements-iframe-integration-fr-24-fr-29-fr-79-solves-r-15: backlog
+  3-4-gateway-rate-limiter-with-bin-velocity-check-fr-81-solves-r-05: backlog
+  3-5-3ds-step-up-event-signing-fr-27-fr-82-solves-at-03-root-cause: backlog
+  epic-3-retrospective: optional
+  epic-4: backlog  # Epic 4: Order Fulfillment and Tracking
+  4-1-orderservice-append-only-event-log-fr-30-fr-31: backlog
+  4-2-orderservice-post-payment-lifecycle-fr-32: backlog
+  4-3-user-visible-order-timeline-fr-33: backlog
+  4-4-orderservice-edit-after-pay-fr-34: backlog
+  4-5-shipmentservice-carrier-agnostic-adapter-fr-35: backlog
+  4-6-shipment-webhook-ingestion-retry-fr-36-fr-39-solves-r-13: backlog
+  epic-4-retrospective: optional
+  epic-5: backlog  # Epic 5: Customer Profiles, Address, and Authentication
+  5-1-customerservice-customer-aggregate-address-book-fr-45-fr-47: backlog
+  5-2-pdpd-data-export-fr-46-fr-49-solves-lc-01: backlog
+  5-3-vietnamese-address-autocomplete-fr-48: backlog
+  5-4-authservice-email-password-mfa-account-lockout-fr-73-fr-75-fr-76-solves-at-02: backlog
+  5-5-rbac-roles-service-account-jwt-fr-74: backlog
+  5-6-loyalty-points-fr-50: backlog
+  5-7-pricingservice-stub-fr-65-fr-67-placeholder: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog  # Epic 6: Search with Vietnamese Diacritic Tolerance
+  6-1-searchservice-per-locale-es-index-bootstrap-fr-51-solves-r-07: backlog
+  6-2-vietnamese-analyzer-with-diacritic-folding-phonetic-fallback-fr-52-solves-r-07: backlog
+  6-3-faceted-search-aggregations-fr-53: backlog
+  6-4-rule-based-recommendations-v1-fr-54-fr-55: backlog
+  epic-6-retrospective: optional
+  epic-7: backlog  # Epic 7: Return Merchandise
+  7-1-rma-workflow-with-exchange-first-default-fr-40-fr-41: backlog
+  7-2-partial-returns-photo-upload-fr-42-fr-44: backlog
+  7-3-cumulative-refund-safety-check-fr-43-solves-di-07: backlog
+  epic-7-retrospective: optional
+  epic-8: backlog  # Epic 8: Admin Management UI
+  8-1-admin-ui-catalog-write-edit-fr-61-fr-62: backlog
+  8-2-admin-ui-for-order-management-fr-63: backlog
+  8-3-approval-workflows-for-high-impact-changes-fr-64: backlog
+  8-4-reviews-module-fr-69-to-fr-72: backlog
+  epic-8-retrospective: optional
+  epic-9: backlog  # Epic 9: Notifications and Vietnamese Tax-Invoice
+  9-1-notificationservice-event-driven-via-sendgrid-fcm-fr-56-to-fr-60: backlog
+  9-2-invoiceservice-vietnamese-tax-invoice-with-serialized-allocator-jasper-qr-fr-78-solves-lc-03-r-06: backlog
+  9-2a-pre-condition-credentials-row-required-closes-q5-side: backlog
+  9-2b-sprint-lead-collects-vn-tax-credentials-from-accountant-q5-closure: backlog
+  9-3-daily-register-batch-fr-78-completes-vietnamese-compliance: backlog
+  epic-9-retrospective: optional
+  epic-10: backlog  # Epic 10: Observability, Chaos Engineering, and Hardening
+  10-1-lgtm-dashboards-provisioned-from-git-nfr-obs-1-nfr-obs-2: backlog
+  10-2-one-chaos-experiment-per-p0-risk-nfr-obs-4-adr-16: backlog
+  10-3-opa-admission-policies-adr-19-nfr-sec-3: backlog
+  10-4-runbooks-per-alert-adr-16: backlog
+  10-5-end-to-end-saga-test-under-failure-fr-9-fr-25-fr-26-fr-43-fr-81-fr-82: backlog
+  epic-10-retrospective: optional
+
+# Total: 11 epics, 57 stories, 11 retrospectives
