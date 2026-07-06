@@ -24,7 +24,8 @@ import vn.vnpt.inventory.application.port.OutboxPublisher;
 import vn.vnpt.util.common.SnowflakeIdGenerator;
 
 /**
- * Modulith outbox publisher — Story 1.5 (ADR-01 / ADR-04 / ADR-14).
+ * Modulith outbox publisher — Story 1.5 (ADR-01 / ADR-04 / ADR-14); extended in Story 1.6 for
+ * ADR-20 producer-side HMAC signing.
  *
  * <p>Two responsibilities:
  *
@@ -37,11 +38,11 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
  *       fire.
  * </ol>
  *
- * <p>Story 1.5 ships the NO-signing half of the bridge. ADR-20's producer-side HMAC signing lives
- * in catalog's {@code ModulithOutboxPublisher} (Story 1.3); the corresponding V002 follow-up
- * (signatures extension + {@code @Value} injection) lands when Story 1.8 wires the lifecycle
- * events. The {@code signatures} map parameter is accepted (5-arg signature) but ignored — the
- * inventory V001 {@code outbox} table does not yet have a {@code signatures} column.
+ * <p>Story 1.6 closes the ADR-20 producer-side gap for inventory outbound events: the
+ * {@code signatures} map is now persisted to the {@code outbox.signatures} JSONB column (V004).
+ * The CALLER (use case) computes the HMAC over the JCS-canonical payload; this publisher only
+ * persists the supplied signatures map. The publisher is intentionally dumb — single
+ * responsibility: serialize payload + persist signatures to row + fire in-process event.
  *
  * <p>Why both JDBC write AND {@code ApplicationEventPublisher.publishEvent}: the Modulith
  * bridge's default {@code JdbcOutboxChannel} assumes its own column shape ({@code type},
@@ -57,12 +58,12 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
   private static final Logger log = LoggerFactory.getLogger(ModulithOutboxPublisher.class);
 
   /**
-   * INSERT payload. The {@code ::jsonb} cast lets Postgres accept the JSON string from a String[]
-   * bind without per-row type-coercion in the driver.
+   * INSERT payload + signatures. The {@code ::jsonb} casts let Postgres accept the JSON strings
+   * from String[] binds without per-row type-coercion in the driver.
    */
   private static final String SQL_INSERT_OUTBOX =
-      "INSERT INTO outbox (aggregate_type, aggregate_id, event_type, event_id, payload)"
-          + " VALUES (?, ?, ?, ?, ?::jsonb)";
+      "INSERT INTO outbox (aggregate_type, aggregate_id, event_type, event_id, payload, signatures)"
+          + " VALUES (?, ?, ?, ?, ?::jsonb, ?::jsonb)";
 
   private final JdbcTemplate jdbcTemplate;
   private final ObjectMapper objectMapper;
@@ -84,11 +85,13 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
       String eventType,
       Object event,
       Map<String, String> signatures) {
-    // ponytail: signatures parameter is currently ignored. ADR-20's HMAC producer side lives in
-    // catalog; inventory's outbound events are unsigned in Story 1.5. V002 follow-up adds the
-    // signatures column + signer.
     long eventId = SnowflakeIdGenerator.generateId();
     String payloadJson = serialize(event);
+    // ponytail: caller-supplied signatures Map is JSON-serialized as-is. Empty Map.of() yields
+    // "{}" (signed off — Story 1.5's AdjustInventoryUseCase passes Map.of() and the V004 column
+    // accepts JSON null OR empty object). Pre-1.6 callers (AdjustInventoryUseCase) continue to
+    // pass Map.of(); their events remain unsigned (matches Story 1.5 design).
+    String signaturesJson = serializeSignatures(signatures);
 
     jdbcTemplate.update(
         SQL_INSERT_OUTBOX,
@@ -96,7 +99,8 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
         aggregateId,
         eventType,
         eventId,
-        payloadJson);
+        payloadJson,
+        signaturesJson);
 
     if (log.isDebugEnabled()) {
       log.debug(
@@ -124,6 +128,18 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
     } catch (Exception e) {
       throw new IllegalStateException(
           "Failed to serialize outbox value " + value.getClass().getName(), e);
+    }
+  }
+
+  /** Serialize the signatures Map to JSON. Empty Map → {@code "{}"}. */
+  private String serializeSignatures(Map<String, String> signatures) {
+    if (signatures == null || signatures.isEmpty()) {
+      return "{}";
+    }
+    try {
+      return objectMapper.writeValueAsString(signatures);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to serialize signatures", e);
     }
   }
 

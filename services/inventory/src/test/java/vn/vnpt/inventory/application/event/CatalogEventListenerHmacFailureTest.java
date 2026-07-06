@@ -53,7 +53,7 @@ class CatalogEventListenerHmacFailureTest {
   @BeforeEach
   void clean() {
     new JdbcTemplate(dataSource)
-        .execute("TRUNCATE TABLE inventory_ledger, warehouses RESTART IDENTITY");
+        .execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
   }
 
   @Test

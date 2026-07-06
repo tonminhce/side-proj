@@ -52,7 +52,7 @@ class OnHandUseCaseTest {
 
   @org.junit.jupiter.api.BeforeEach
   void clean() {
-    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_ledger, warehouses RESTART IDENTITY");
+    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
   }
 
   @Test

@@ -59,7 +59,7 @@ class InventoryLedgerEntryRepositoryTest {
   @org.junit.jupiter.api.BeforeEach
   void seedWarehouse() {
     // Truncate to isolate from prior tests in the shared Postgres container.
-    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_ledger, warehouses RESTART IDENTITY");
+    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
     Warehouse seeded =
         warehouseRepository.save(
             Warehouse.builder()

@@ -24,9 +24,10 @@ public interface OutboxPublisher {
    * @param aggregateId Snowflake id of the aggregate root (the {@code InventoryLedgerEntry.uuid})
    * @param eventType dotted event type string ({@code "inventory.receive"})
    * @param event domain event instance (any type — Jackson serializes via runtime class)
-   * @param signatures per-service signature map. Pass {@link Map#of()} when the publisher is
-   *     expected to compute the signature itself; Story 1.5's inventory publisher does NOT sign
-   *     (signing lands with V002). Story 1.8 wires the lifecycle events with full signing.
+   * @param signatures per-service signature map. Story 1.6 closed producer-side HMAC signing
+   *     for inventory outbound events (ADR-20); the caller (use case) computes the HMAC over
+   *     the JCS-canonical payload and passes the resulting map here. Pass {@link Map#of()}
+   *     for legacy unsigned events (e.g. Story 1.5's {@code AdjustInventoryUseCase}).
    */
   void append(
       String aggregateType,

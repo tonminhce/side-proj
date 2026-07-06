@@ -64,7 +64,7 @@ class AdjustInventoryUseCaseTest {
 
   @BeforeEach
   void seedWarehouse() {
-    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_ledger, warehouses RESTART IDENTITY");
+    new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
     Warehouse seeded =
         warehouseRepository.save(
             Warehouse.builder().code("HCM-01-UC-" + System.nanoTime()).displayName("Ho Chi Minh").build());

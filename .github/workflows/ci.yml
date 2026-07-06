@@ -57,14 +57,13 @@ jobs:
       - name: Test catalog module (Story 1.2 — gate flipped to blocking)
         run: mvn -pl services/catalog -am test
 
-      # Inventory gate transition (Story 1.4 → Story 1.5):
-      # Story 1.4 shipped with continue-on-error: true because the admin read view landed in
-      # parallel with the BFF + admin frontend hardening. Story 1.5 (InventoryService bootstrap
-      # + per-warehouse ledger + first in-process consumer) ships with continue-on-error: true;
-      # flip to blocking in Story 1.6 when the reservation saga depends on this module.
-      - name: Test inventory module (Story 1.5 — gate advisory)
+      # Inventory gate transition (Story 1.5 → Story 1.6):
+      # Story 1.5 shipped with continue-on-error: true because the per-warehouse ledger landed
+      # in parallel with the test infra hardening. Story 1.6 (atomic reservation with TTL +
+      # sweeper, FR-9 / DI-01 root-cause fix) flips the gate to blocking — the saga in
+      # Story 2.5 depends on this module's green tests.
+      - name: Test inventory module (Story 1.6 — gate flipped to blocking)
         run: mvn -pl services/inventory -am test
-        continue-on-error: true
 
       # 2. Validate — proves all 17 <module> entries resolve.
       - name: Reactor validate (mvn validate)

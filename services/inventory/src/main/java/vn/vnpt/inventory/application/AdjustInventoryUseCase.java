@@ -31,9 +31,11 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
  * {@link SnowflakeIdGenerator#generateId()}. The {@code outbox.event_id} and
  * {@code inventory_ledger.event_id} both carry this value; downstream consumers dedup on it.
  *
- * <p>Story 1.3 sign-on-publish extension is a follow-up (Story 1.5 V002): outbound events are
- * currently unsigned. The producer-side signing lives in catalog; inventory consumes signed
- * events from catalog but does not yet sign its own outbound events.
+ * <p>Story 1.6 closes ADR-20 producer-side signing for inventory outbound events: this use case
+ * still passes {@link Map#of()} for backward compatibility (its events are operationally
+ * internal — admin adjustments — and don't cross service boundaries). {@code
+ * ReserveInventoryUseCase} and {@code ReleaseInventoryUseCase} (Story 1.6) sign their outbound
+ * events; the signing is the caller's responsibility, not the publisher's.
  */
 @Service
 @Transactional

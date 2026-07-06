@@ -408,3 +408,216 @@ Split into a separate file rather than `@MockitoBean` on the existing `AdjustInv
 4. **Story 1.7 (multi-warehouse per-variant stock) follow-up:** The new `findOnHandForWarehouse_returnsAggregatedView` test pins the per-warehouse breakdown correctness. Story 1.7 will likely add an admin API for per-warehouse stock visibility — the same test class is the right home for HTTP-level coverage.
 
 5. **Story 1.8 (lifecycle events with Avro strict compat + `@SoftUk`) follow-up:** The new `InventoryReasonTest.toColumnValue_isLowercaseUnderscoreFree` parameterization covers the 6 v1 reasons. Story 1.8 may add `RETURN` and `INSPECT` reasons — extend the parameterization or split into per-reason tests if the mapping logic diverges.
+
+---
+
+# Test Automation Summary — Story 1.6
+
+**Story:** Reservation with TTL (FR-9) — solves DI-01 root cause
+**Story file:** `_bmad-output/implementation-artifacts/1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause.md`
+**Workflow:** `bmad-qa-generate-e2e-tests`
+**Test framework:** JUnit 5 + Spring Boot Test + AssertJ + ArchUnit + Testcontainers (Postgres 16-alpine) + Awaitility + Mockito (`@MockitoBean`)
+**Test command:** `mvn -pl services/inventory -am test`
+**Date:** 2026-07-07
+
+Story 1.6 is a backend-only service (no UI surface). API/integration testing only — E2E tests deferred to Story 10.5 per Story 1.4/1.5 convention.
+
+---
+
+## Generated / Added Tests
+
+### Existing tests from Story 1.6 implementation (already authored)
+
+| Path | Cases | Covers |
+|------|------:|--------|
+| `services/inventory/src/test/java/vn/vnpt/inventory/InventoryApplicationContextTest.java` | 8 | Story 1.6 AC #16 + #22 — `contextLoads` / datasource targets `inventory_db` / `flywayAppliedV001` / `flywayAppliedV003` / `flywayAppliedV004` / `allExpectedTablesExist` (incl. `inventory_reservation`) / `inventoryLedgerEventIdHasUniqueConstraint` / `inventoryOnHandViewExistsAndAggregates` |
+| `services/inventory/src/test/java/vn/vnpt/inventory/InventoryPackageBoundaryTest.java` | 4 | Story 1.6 AC #19 — `inventory_doesNotDependOnSiblingServices` / `inventory_writesOnlyToInventoryLedger` (Story 1.5) / `inventory_reservation_isTerminalOnly` (NEW) / `inventory_outboxWritesAreAtomicWithReservation` (NEW — ADR-04 atomicity guard on use cases) |
+| `services/inventory/src/test/java/vn/vnpt/inventory/domain/InventoryReservationTest.java` | 3 | Story 1.6 AC #4 — builder carries all fields / equals field-based via reflection / `setSagaStepId` is absent (immutable ADR-11 idempotency key) |
+| `services/inventory/src/test/java/vn/vnpt/inventory/domain/ReservationStatusTest.java` | 1 | Story 1.6 AC #4 — `isTerminal()` returns `true` for RELEASED/COMMITTED, `false` for ACTIVE |
+| `services/inventory/src/test/java/vn/vnpt/inventory/domain/exception/InsufficientStockExceptionTest.java` | 1 | Story 1.6 AC #6 — constructor stores the 4-tuple (variantId/warehouseId/requested/available) for diagnostic logging + 409 mapping |
+| `services/inventory/src/test/java/vn/vnpt/inventory/infrastructure/repository/InventoryReservationRepositoryTest.java` | 2 | Story 1.6 AC #5 — `findBySagaStepId` (ADR-11 idempotency lookup) / `findByStatusAndExpiresAtBefore` (sweeper query) |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReserveInventoryUseCaseTest.java` | 3 | Story 1.6 AC #6 — happy path (reservation + ledger + outbox w/ HMAC sig in same tx) / idempotency on `saga_step_id` / insufficient stock throws 409 |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReserveInventoryUseCaseConcurrentTest.java` | 1 × 100 | Story 1.6 AC #17 (DI-01 regression guard) — `ExecutorService` + `CountDownLatch` race; on_hand=1, qty=1, 2 threads; exactly 1 success + 1 `InsufficientStockException`. `@RepeatedTest(100)` amplifies any race condition. |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReleaseInventoryUseCaseTest.java` | 2 | Story 1.6 AC #7 — `release(sagaStepId)` flips to RELEASED + writes `reason='release'` ledger row + outbox row / `releaseExpired(uuid)` is idempotent on terminal-state |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReservationSweeperJobTest.java` | 1 | Story 1.6 AC #8 — seeds 3 ACTIVE reservations with `expires_at='2000-01-01'`; invokes `sweepExpired()` directly; asserts all 3 are RELEASED + 3 `inventory.released` outbox rows |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/OnHandAvailableStockTest.java` | 1 | Story 1.6 AC #10 — `findAvailable` returns `on_hand - active_reservations`; reservation decrements ledger too, so result reflects double-count |
+| `services/inventory/src/test/java/vn/vnpt/inventory/api/InventoryReservationControllerTest.java` | 4 | Story 1.6 AC #11 — `POST /api/inventory-reservations` 201 / 409 / 404 / 400 |
+
+**Story 1.6 implementation total: 31 tests** across 12 classes (the concurrent test counts as 1 method but executes 100 times via `@RepeatedTest`).
+
+### QA-pass gap fills (this workflow run)
+
+| Path | Δ Cases | Gap addressed |
+|------|--------:|---------------|
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReserveInventoryUseCaseTest.java` | +5 | **MEDIUM — AC #6 validation paths (`quantity <= 0`, blank `sagaStepId`, negative `ttl`) and `WarehouseNotFoundException` use-case path were not exercised.** Controller test exercised the 400/404 mappings via `@MockitoBean`, but the use-case-level guard (`IllegalArgumentException`, `WarehouseNotFoundException`) had no direct integration pin. A regression that drops the `validate(...)` block or the `warehouseRepository.findById(...)` guard would only surface at the controller integration layer. |
+| `services/inventory/src/test/java/vn/vnpt/inventory/application/ReleaseInventoryUseCaseTest.java` | +2 | **MEDIUM — AC #7 idempotency on unknown `saga_step_id` (saga retry with bad step → no-op) and idempotency on already-RELEASED reservation (terminal-state guard) were not directly pinned.** Existing test covered the second call on `releaseExpired(uuid)`; the `release(sagaStepId)` path had no idempotency pin. |
+| `services/inventory/src/test/java/vn/vnpt/inventory/api/ReservationControllerExceptionHandlerTest.java` (new) | +4 | **MEDIUM — AC #22 4-status mapping was only covered via the controller test (which stubs the exceptions).** Direct unit tests pin each branch in isolation: 409 with 4 diagnostic fields / 404 / 400 / 409 idempotency_conflict (the duplicate `saga_step_id` saga-retry path). |
+
+**QA-pass additions: +11 tests across 3 files** (1 new file + 2 existing files extended).
+
+---
+
+## Coverage
+
+| AC | Before this QA pass | After this QA pass | Notes |
+|----|--------------------:|-------------------:|-------|
+| #3 (V003 `inventory_reservation` table + V004 outbox.signatures) | ✅ | ✅ | `flywayAppliedV003` + `flywayAppliedV004` + `allExpectedTablesExist` pin the migrations + canonical schema |
+| #4 (InventoryReservation entity + ReservationStatus enum + InsufficientStockException) | ✅ | ✅ | Domain tests cover fields / equals / setter absence / enum `isTerminal()` / 4-tuple exception |
+| #5 (InventoryReservationRepository — `findBySagaStepId` / `findByStatusAndExpiresAtBefore` / `findByVariantIdAndStatus`, no `delete*`) | ✅ | ✅ | Repository tests + ArchUnit boundary |
+| #6 (ReserveInventoryUseCase — validation / FOR UPDATE / idempotency / outbox atomicity / HMAC) | ⚠️ Partial — happy + idempotency + insufficient covered; validation paths NOT pinned | ✅ | +5 use-case tests cover `quantity <= 0` / `quantity < 0` / blank `sagaStepId` / negative `ttl` / `WarehouseNotFoundException` |
+| #7 (ReleaseInventoryUseCase — `release(sagaStepId)` / `releaseExpired(uuid)`; terminal-state guard) | ⚠️ Partial — happy + `releaseExpired` idempotency covered; `release` on unknown step + already-RELEASED NOT pinned | ✅ | +2 release tests |
+| #8 (ReservationSweeperJob — `@Scheduled(fixedDelay=30s)`, batch 100, REQUIRES_NEW per release) | ✅ | ✅ | Sweeper test seeds 3 expired ACTIVE → asserts all RELEASED |
+| #9 (application.yml `inventory.reservation.*` config block) | ✅ (no test — config-only) | ✅ | Unchanged |
+| #10 (OnHandUseCase.findAvailable) | ✅ | ✅ | Pins `available = on_hand - active_reservations` |
+| #11 (POST /api/inventory-reservations — 201 / 409 / 404 / 400) | ✅ | ✅ | Controller test via `@MockitoBean` |
+| #12 (ModulithOutboxPublisher 5-arg with signatures JSONB) | ✅ | ✅ | `ReserveInventoryUseCaseTest` asserts `signatures` column populated; use-case calls `HmacEventSigner.sign(...)` |
+| #13 (dev/.env.example 4 reservation env vars) | ✅ (no test — config-only) | ✅ | Unchanged |
+| #14-15 (smoke.sh + dev/README.md updates) | ✅ (no test — smoke-only) | ✅ | Unchanged |
+| #16 (14 new inventory tests target — actually 31 shipped; expected 20, actual 31) | ✅ | ✅ | Exceeded the 14-test AC enumeration (Ponytail correction: 20 expected by Dev Notes, 31 actual) |
+| #17 (util tests remain 57/57) | ✅ | ✅ | `mvn -pl util -am test` → 57/57 |
+| #18 (root pom remains at 17 `<module>` entries) | ✅ | ✅ | `mvn validate` → 17 modules |
+| #19 (InventoryPackageBoundaryTest → 4/4) | ✅ | ✅ | `inventory_reservation_isTerminalOnly` + `inventory_outboxWritesAreAtomicWithReservation` pinned |
+| #20 (service boots; Flyway applies V003+V004; actuator UP) | ✅ | ✅ | `contextLoads` + Flyway history + `inventoryOnHandViewExistsAndAggregates` |
+| #21 (end-to-end smoke script reservation_smoke.sh) | ✅ | ✅ | Script exists in `dev/scripts/reservation_smoke.sh` |
+| #22 (exception handler: InsufficientStockException → 409, WarehouseNotFoundException → 404, IllegalArgumentException → 400, DataIntegrityViolationException → 409) | ⚠️ Partial — only via controller stubs | ✅ | New `ReservationControllerExceptionHandlerTest` pins all 4 mappings directly |
+| #23 (dev platform files + CI gate flip `continue-on-error: true` → `false`) | ✅ (no test — CI config) | ✅ | Unchanged |
+
+### Test count
+
+| Stage | Count | Δ |
+|-------|------:|---:|
+| Story 1.5 implementation + QA pass | 154 (57 util + 65 catalog + 32 inventory) | — |
+| **Story 1.6 implementation** | **157 inventory** | +125 |
+| **This QA pass** | **+11 inventory** (5 validation + 2 release idempotency + 4 handler) | |
+| **Total after Story 1.6 QA** | **168 inventory + 65 catalog + 57 util = 290 tests** | |
+
+`mvn -pl services/inventory -am test` → **168 inventory tests pass, 0 failures, 0 errors, 0 skipped** (verified 2026-07-07). Per-class breakdown:
+```
+[INFO] Tests run: 8,  -- in InventoryApplicationContextTest
+[INFO] Tests run: 4,  -- in InventoryPackageBoundaryTest
+[INFO] Tests run: 4,  -- in InventoryReservationControllerTest          (+0; baseline 4)
+[INFO] Tests run: 4,  -- in ReservationControllerExceptionHandlerTest   (+4 from QA pass, NEW file)
+[INFO] Tests run: 1,  -- in ReservationSweeperJobTest
+[INFO] Tests run: 1,  -- in OnHandAvailableStockTest
+[INFO] Tests run: 1,  -- in AdjustInventoryUseCaseAtomicityTest
+[INFO] Tests run: 100,-- in ReserveInventoryUseCaseConcurrentTest       (1 method × 100)
+[INFO] Tests run: 8,  -- in ReserveInventoryUseCaseTest                 (+5 from QA pass)
+[INFO] Tests run: 2,  -- in OnHandUseCaseTest
+[INFO] Tests run: 2,  -- in CatalogEventListenerTest
+[INFO] Tests run: 1,  -- in CatalogEventListenerHmacFailureTest
+[INFO] Tests run: 5,  -- in AdjustInventoryUseCaseTest
+[INFO] Tests run: 4,  -- in ReleaseInventoryUseCaseTest                 (+2 from QA pass)
+[INFO] Tests run: 4,  -- in InventoryLedgerEntryRepositoryTest
+[INFO] Tests run: 2,  -- in WarehouseRepositoryTest
+[INFO] Tests run: 2,  -- in InventoryReservationRepositoryTest
+[INFO] Tests run: 3,  -- in InventoryLedgerEntryTest
+[INFO] Tests run: 1,  -- in ReservationStatusTest
+[INFO] Tests run: 6,  -- in InventoryReasonTest
+[INFO] Tests run: 1,  -- in WarehouseTest
+[INFO] Tests run: 1,  -- in InsufficientStockExceptionTest
+[INFO] Tests run: 3,  -- in InventoryReservationTest
+```
+
+### Other CI gates verified
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Reactor count | `mvn validate` | BUILD SUCCESS — 17 `<module>` entries (Story 1.5 baseline preserved; Story 1.6 did NOT add a module) |
+| Util baseline | `mvn -pl util -am test` | 57/57 pass (Story 1.5 baseline preserved) |
+| Catalog baseline | `mvn -pl services/catalog -am test` | 65/65 pass (Story 1.4 baseline preserved) |
+| Inventory ArchUnit | `mvn -pl services/inventory test -Dtest=InventoryPackageBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false` | 4/4 pass |
+
+---
+
+## Discovered gaps (auto-applied)
+
+### MEDIUM — AC #6 validation paths in `ReserveInventoryUseCase` not directly exercised
+
+**Symptom:** `ReserveInventoryUseCase.validate(cmd)` (private static) throws `IllegalArgumentException` for `quantity <= 0`, `sagaStepId` blank, `ttl` negative/zero. The `warehouseRepository.findById(...)` guard throws `WarehouseNotFoundException` for unknown warehouseId. The controller test covered the HTTP-level 400/404 mappings via `@MockitoBean` stubs, but the use-case-level guard was not directly pinned — a regression that drops `validate(...)` or removes the warehouse lookup would only surface at the HTTP layer (which is the last defense, not the first).
+
+**Fix applied:** 5 new tests in `ReserveInventoryUseCaseTest`:
+1. `reserve_throwsIllegalArgumentWhenQuantityIsZero` — `quantity=0` → `IllegalArgumentException` with message containing "quantity".
+2. `reserve_throwsIllegalArgumentWhenQuantityIsNegative` — `quantity=-1` → same.
+3. `reserve_throwsIllegalArgumentWhenSagaStepIdIsBlank` — `sagaStepId="  "` → `IllegalArgumentException` with message containing "sagaStepId".
+4. `reserve_throwsIllegalArgumentWhenTtlIsNegative` — `ttl=Duration.ofMinutes(-1)` → `IllegalArgumentException` with message containing "ttl".
+5. `reserve_throwsWarehouseNotFoundForUnknownWarehouseId` — `warehouseId=9_999_999L` → `WarehouseNotFoundException`.
+
+### MEDIUM — AC #7 release idempotency on unknown step + terminal state not directly pinned
+
+**Symptom:** `ReleaseInventoryUseCase.release(sagaStepId)` is documented as "If absent → log + return (idempotent release; no-op for unknown steps)" and "If status != ACTIVE → log + return (terminal state; idempotent re-release)". The original `release_bySagaStepId_marksReservationReleased` covered the happy path. `releaseExpired_byUuid_marksReservationReleased` covered the second-call terminal-state guard on the `uuid` overload. The `sagaStepId` overload's idempotency on an already-RELEASED reservation was not pinned, and the unknown-step no-op path was not pinned at all.
+
+**Fix applied:** 2 new tests in `ReleaseInventoryUseCaseTest`:
+1. `release_unknownSagaStepId_isNoOp` — calls `release("step-unknown-...")` with no prior reservation; asserts no exception thrown + `outbox` ledger has 0 `reason='release'` rows.
+2. `release_alreadyReleasedReservation_isNoOp` — seeds + reserves + releases once; calls `release` again with the same `sagaStepId`; asserts exactly 1 `reason='release'` ledger row (terminal-state guard fires).
+
+### MEDIUM — AC #22 exception handler 4-status mapping not directly pinned
+
+**Symptom:** `ReservationControllerExceptionHandler` maps 4 exception types to HTTP statuses (409 / 404 / 400 / 409). The controller test stubbed the use case to throw each, but the handler itself was not directly unit-tested — a regression that swaps the status codes or drops a mapping would only surface via MockMvc. The 4-mapping contract is critical for saga retry semantics (saga retries on duplicate `saga_step_id` must see 409 with `idempotency_conflict`, not 500).
+
+**Fix applied:** New `ReservationControllerExceptionHandlerTest` (pure JUnit, no Spring):
+1. `insufficientStock_mapsTo409WithDiagnosticFields` — asserts 409 + `error=insufficient_stock` + all 4 diagnostic fields (`variantId`, `warehouseId`, `requested`, `available`).
+2. `warehouseNotFound_mapsTo404` — asserts 404 + `error=warehouse_not_found`.
+3. `illegalArgument_mapsTo400` — asserts 400 + `error=validation_error` + `message="bad input"`.
+4. `dataIntegrityViolation_mapsTo409IdempotencyConflict` — asserts 409 + `error=idempotency_conflict` (the ADR-11 saga-retry path).
+
+---
+
+## Gaps NOT addressed (deliberately skipped)
+
+| Gap | Why skipped | When to revisit |
+|-----|-------------|----------------|
+| `ModulithOutboxPublisher` direct unit test (5-arg signature persistence + signatures JSONB serialization) | The 5-arg signature is exercised end-to-end by `ReserveInventoryUseCaseTest.reserve_persistsReservationAndLedgerRowAndOutboxEvent` (asserts `signatures` column populated) and `ReservationSweeperJobTest` (asserts 3 outbox rows for `inventory.released`). A pure unit test with a mocked `JdbcTemplate` + `ApplicationEventPublisher` would duplicate the wiring assertion without adding signal. The integration path is real (Testcontainers + JPA + JdbcTemplate). | Never — integration coverage is sufficient. |
+| Sweeper batch-size enforcement (100 limit per tick) | The `sweeper-batch-size` config is in `application.yml` (AC #9) and `ReservationSweeperJob` uses `Stream.limit(batchSize)` (per Story 1.6 Ponytail simplification). A batch-size test would need to seed > 100 expired reservations and verify the sweeper returns after processing exactly 100 — a 100-row seed in a single test is expensive and the `Stream.limit` is a one-liner with high confidence. | Story 1.7+ when reservation volume warrants the overhead. |
+| `findAvailable` empty-Optional-for-unseen-variant case (AC #10) | The `OnHandAvailableStockTest` exercises the seen-variant path (asserts `available=10L` for `on_hand=10`). The empty-Optional path (variant unseen → no ledger rows) is implicitly covered by the JPQL `COALESCE(SUM(l.delta), 0)` (Story 1.5's `InventoryLedgerEntryRepositoryTest.sumOnHand_returnsEmptyForUnseenVariant` pins the same COALESCE pattern). The double-counting behavior (where `available = on_hand - active_reservations` after a reserve) is documented in the test JavaDoc + the use-case JavaDoc. | Never — coverage is real (COALESCE pin in Story 1.5 + test JavaDoc explains the double-count). |
+| HMAC payload-tampering test (signature for payload A, event with payload B → verify fails) | Story 1.6 signs the canonical-JCS envelope of the `InventoryReserved` payload. A payload-tampering test would require a parallel signature-computation helper to forge an event with mismatched signature. The current HMAC failure-path tests (Story 1.5's `CatalogEventListenerHmacFailureTest`) cover the catalog-side verify branch — the inventory producer-side signing is exercised by the use-case test asserting the `signatures` column is populated. | Story 10.x — when cross-process Kafka consumers verify inventory events. The failure-path verify test lands with the consumer-side test harness. |
+| Sweeper lag under load (AC #9 Ponytail note) | The 30s sweep interval + 100-record batch is documented in `application.yml` comment + the sweeper JavaDoc. A latency test would require running the sweeper against a 200-record load and asserting < 30s end-to-end — flaky in CI and the operational concern is for prod, not unit tests. | Story 10.2 — when the chaos experiment validates R-02 mitigation under failure. |
+| Saga retry with stale saga_step_id (operational risk per AC #6) | The ADR-11 idempotency check is covered by `ReserveInventoryUseCaseTest.reserve_isIdempotentOnSagaStepId` (same step returns same reservation). The "stale step" scenario (saga restart after partial completion) is functionally identical to the same-step-twice scenario — the idempotency check fires the same way. | Never — same-step-twice IS the saga-retry contract. |
+
+---
+
+## Validation against `checklist.md`
+
+### Test Generation
+
+- [x] **API tests generated** — `InventoryReservationControllerTest` (4 cases: 201 / 409 / 404 / 400) covers the `POST /api/inventory-reservations` endpoint per AC #11. New `ReservationControllerExceptionHandlerTest` (4 cases) pins the 4-status mapping per AC #22.
+- [x] **E2E tests generated (if UI exists)** — N/A. Story 1.6 has no UI surface. E2E coverage is via `dev/scripts/reservation_smoke.sh` (manual end-to-end per AC #21) — Playwright e2e deferred to Story 10.5 per Story 1.4/1.5 convention.
+- [x] **Tests use standard test framework APIs** — JUnit 5 + Spring Boot Test + AssertJ + ArchUnit + Testcontainers + Awaitility + Mockito (`@MockitoBean`). No new test deps.
+- [x] **Tests cover happy path** — `reserve_persistsReservationAndLedgerRowAndOutboxEvent`, `release_bySagaStepId_marksReservationReleased`, `sweepExpired_releasesAllExpiredActiveReservations`, `findAvailable_returnsOnHandMinusActiveReservations`, `post_returns201OnSuccess`, `concurrent reserve attempt (× 100)`.
+- [x] **Tests cover 1-2 critical error cases** — `reserve_throwsInsufficientStockWhenAvailableLessThanRequested` (FR-9 binding) + `reserve_concurrent_onlyOneSucceedsWhenStockIsOne` (DI-01 regression guard) + `post_returns409OnInsufficientStock` + `release_unknownSagaStepId_isNoOp` + 4 validation tests + 4 handler mapping tests.
+
+### Test Quality
+
+- [x] **All generated tests run successfully** — **168/168 inventory + 57/57 util + 65/65 catalog = 290 tests pass**; full suite green. (The 100× concurrent test is counted as 100 individual executions in the inventory total.)
+- [x] **Tests use proper locators (semantic, accessible)** — N/A (backend integration tests; no UI). Backend tests use `assertThat` + AssertJ + `jsonPath` (semantic) + raw SQL `JdbcTemplate.queryForObject` (semantic — queries by column name).
+- [x] **Tests have clear descriptions** — method names describe outcome: `reserve_throwsIllegalArgumentWhenSagaStepIdIsBlank`, `release_alreadyReleasedReservation_isNoOp`, `insufficientStock_mapsTo409WithDiagnosticFields`, `dataIntegrityViolation_mapsTo409IdempotencyConflict`.
+- [x] **No hardcoded waits or sleeps** — concurrent test uses `ExecutorService` + `CountDownLatch` + `Future.get(timeout)` (bounded wait, not Thread.sleep). Sweeper test invokes `sweepExpired()` directly (no cron polling). Other tests use synchronous Spring context + Testcontainers `TRUNCATE TABLE ... RESTART IDENTITY` for state isolation.
+- [x] **Tests are independent (no order dependency)** — each `@SpringBootTest` class has its own `@Container` + `@DynamicPropertySource` (Testcontainers container lifecycle class-scoped via `@Testcontainers`); `@BeforeEach TRUNCATE` resets state per-test; `@MockitoBean` provides a fresh mock per test class; `sagaStepId = "..." + System.nanoTime()` uniquifies ADR-11 idempotency keys across tests.
+
+### Output
+
+- [x] **Test summary created** — this file (Story 1.6 section appended after Story 1.4 + 1.5).
+- [x] **Tests saved to appropriate directories** — `services/inventory/src/test/java/vn/vnpt/inventory/{domain,application,api,infrastructure/repository}/`.
+- [x] **Summary includes coverage metrics** — see Coverage table + per-class breakdown + baseline preservation note.
+
+### Validation
+
+**Expected:** All tests pass ✅
+**Actual:** `mvn -pl services/inventory -am test` → Tests run: 168, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS. `mvn -pl util -am test` → Tests run: 57, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS. `mvn -pl services/catalog -am test` → Tests run: 65, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS. `mvn -pl services/inventory test -Dtest=InventoryPackageBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false` → Tests run: 4, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS. **Total: 290 tests, 0 failures.**
+
+---
+
+## Next Steps
+
+1. **Commit QA pass.** 11 new tests across 3 files:
+   - 1 new file: `ReservationControllerExceptionHandlerTest` (4 cases).
+   - 2 existing files extended: `ReserveInventoryUseCaseTest` (+5 validation/warehouse), `ReleaseInventoryUseCaseTest` (+2 idempotency).
+   - No new files in inventory production code, no new deps.
+   - Branch: stay on `fix/r-01-util-parent-pom` per Sprint 0 sequential pattern (Stories 0.1–1.5 already live there). Suggested prefix: `test(inventory): QA-pass gap fills — use-case validation + release idempotency + handler mapping (Story 1.6)`.
+
+2. **Surface to reviewer:** All AC #6 / #7 / #22 gaps closed. The DI-01 regression guard (`ReserveInventoryUseCaseConcurrentTest`) passed all 100× iterations on this run (BUILD SUCCESS, 0 errors, 0 other-than-InsufficientStock exceptions across 200 thread race attempts). The Ponytail double-counting behavior of `findAvailable` is documented in the test JavaDoc + the use case JavaDoc — Story 1.7 multi-warehouse will revisit this when the per-warehouse breakdown extends the query.
+
+3. **Story 2.5 (checkout saga) follow-up:** The saga calls `ReserveInventoryUseCase.reserve(...)` directly (intra-JVM bean lookup per ADR-12). The existing 100× concurrent test pins the FOR UPDATE invariant on the saga's critical path. The new exception handler unit tests pin the HTTP surface the saga's HTTP-driven admin/debug paths use.
+
+4. **Story 10.2 chaos experiment follow-up:** The 100× concurrent test is a steady-state regression guard. The chaos experiment validates the FOR UPDATE pattern under DB connection drop / mid-tx failure — the existing rollback path is pinned by Story 1.5's `AdjustInventoryUseCaseAtomicityTest` (the reservation path inherits the same `@Transactional` semantics).
+
+5. **Story 10.5 e2e-tests follow-up:** A Playwright spec for `POST /api/inventory-reservations` would be the first inventory HTTP E2E test. The current story's HTTP coverage is via `@SpringBootTest` + manually-built `MockMvc` (Boot 4 removed `@WebMvcTest`). The Playwright spec lands with the testcontainers harness + dev compose wiring that Story 10.5 brings.

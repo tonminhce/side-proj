@@ -55,6 +55,13 @@ else
   report 1 "postgres: SELECT 1 (${POSTGRES_INVENTORY_DB:-inventory_db})"
 fi
 
+# 1d. Story 1.6 — also verify inventory_reservation table exists
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_INVENTORY_USER:-inventory_user}" -d "${POSTGRES_INVENTORY_DB:-inventory_db}" -tAc "SELECT 1 FROM pg_tables WHERE tablename = 'inventory_reservation' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: inventory_reservation table exists"
+else
+  report 1 "postgres: inventory_reservation table missing (V003 not applied)"
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"

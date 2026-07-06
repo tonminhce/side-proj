@@ -1,5 +1,6 @@
 package vn.vnpt.inventory;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.base.DescribedPredicate;
@@ -8,10 +9,13 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
+import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepository;
 
 /**
- * Modulith package-boundary enforcement for InventoryService (Story 1.5 / AC #23).
+ * Modulith package-boundary enforcement for InventoryService (Story 1.5 / AC #23; extended in
+ * Story 1.6 / FR-9 with 2 new rules).
  *
  * <p>Rules:
  *
@@ -30,6 +34,13 @@ import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepositor
  *       <p>ponytail: app-level enforcement. A Postgres {@code BEFORE UPDATE OR DELETE} trigger
  *       on {@code inventory_ledger} is the canonical defense; YAGNI for v1. A hardening story
  *       (10.4) adds the trigger.
+ *   <li>{@link #inventory_reservation_isTerminalOnly()} — Story 1.6: append-only invariant on
+ *       {@link InventoryReservationRepository}. No {@code void delete*(...)} method may be
+ *       declared. Reservations are status-transitioned (RELEASED / COMMITTED), never deleted.
+ *   <li>{@link #inventory_outboxWritesAreAtomicWithReservation()} — Story 1.6: ADR-04 atomicity
+ *       guard. {@code ReserveInventoryUseCase} and {@code ReleaseInventoryUseCase} MUST be
+ *       {@code @Transactional} at the class level so the business state + outbox insert are
+ *       atomic.
  * </ol>
  */
 class InventoryPackageBoundaryTest {
@@ -100,5 +111,44 @@ class InventoryPackageBoundaryTest {
             "InventoryLedgerEntryRepository must be append-only; found: " + m);
       }
     }
+  }
+
+  /**
+   * Story 1.6 / AC #5, #19 — append-only invariant on {@link InventoryReservationRepository}.
+   * Reservations are terminal-state transitioned (RELEASED / COMMITTED), never deleted (audit
+   * trail preservation; same philosophy as the ledger).
+   */
+  @Test
+  void inventory_reservation_isTerminalOnly() {
+    Method[] methods = InventoryReservationRepository.class.getDeclaredMethods();
+    for (Method m : methods) {
+      if (m.getName().startsWith("delete")) {
+        throw new AssertionError(
+            "InventoryReservationRepository must be terminal-only; found: " + m);
+      }
+    }
+  }
+
+  /**
+   * Story 1.6 / AC #6, #19 — ADR-04 atomicity guard. The reservation use cases that write to
+   * the outbox MUST be {@code @Transactional} at the class level so the business state +
+   * outbox insert are atomic.
+   */
+  @Test
+  void inventory_outboxWritesAreAtomicWithReservation() {
+    classes()
+        .that()
+        .haveSimpleName("ReserveInventoryUseCase")
+        .or()
+        .haveSimpleName("ReleaseInventoryUseCase")
+        .should()
+        .beAnnotatedWith(Transactional.class)
+        .because(
+            "ADR-04 atomicity guard — use cases that write to outbox MUST be @Transactional"
+                + " so the business state + outbox insert are atomic.")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.inventory"));
   }
 }

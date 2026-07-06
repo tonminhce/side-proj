@@ -1,14 +1,17 @@
 package vn.vnpt.inventory.application;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.vnpt.inventory.application.query.AvailableStockView;
 import vn.vnpt.inventory.application.query.OnHandView;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
 
 /**
- * OnHandUseCase — Story 1.5 / FR-8 (read-side sum-derivation).
+ * OnHandUseCase — Story 1.5 / FR-8 (read-side sum-derivation); extended in Story 1.6 / FR-9
+ * with {@code findAvailable}.
  *
  * <p>Returns the {@code OnHandView} (a read-side projection of
  * {@code SUM(delta) GROUP BY variant_id, warehouse_id}) for the requested variant. The
@@ -35,5 +38,19 @@ public class OnHandUseCase {
   /** Sum-derivation for a single (variant, warehouse) pair. */
   public List<OnHandView> findOnHandForWarehouse(Long variantId, Long warehouseId) {
     return ledgerRepository.sumOnHandByVariantIdAndWarehouseId(variantId, warehouseId);
+  }
+
+  /**
+   * Available stock for a (variant, warehouse) pair — Story 1.6 / FR-9.
+   *
+   * <p>{@code available = onHand - SUM(active reservations)}. Returns {@link Optional} —
+   * empty when the variant has never been seen (no ledger rows AND no reservations).
+   *
+   * <p>This is the pre-flight check for {@code ReserveInventoryUseCase.reserve(...)}; the
+   * canonical authoritative check is the {@code SELECT … FOR UPDATE} inside that use case's
+   * transaction. The pre-flight is fail-fast — a stale reading here does not guarantee success.
+   */
+  public Optional<AvailableStockView> findAvailable(Long variantId, Long warehouseId) {
+    return ledgerRepository.findAvailable(variantId, warehouseId);
   }
 }

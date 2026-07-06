@@ -75,7 +75,7 @@ class AdjustInventoryUseCaseAtomicityTest {
   @BeforeEach
   void seedWarehouse() {
     new JdbcTemplate(dataSource)
-        .execute("TRUNCATE TABLE inventory_ledger, warehouses RESTART IDENTITY");
+        .execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
     warehouseId =
         warehouseRepository
             .save(

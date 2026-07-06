@@ -3,7 +3,10 @@ package vn.vnpt.inventory.infrastructure.repository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import jakarta.persistence.LockModeType;
+import vn.vnpt.inventory.application.query.AvailableStockView;
 import vn.vnpt.inventory.application.query.OnHandView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
 
@@ -59,4 +62,47 @@ public interface InventoryLedgerEntryRepository
           + "WHERE l.variantId = :variantId AND l.warehouseId = :warehouseId "
           + "GROUP BY l.variantId, l.warehouseId")
   List<OnHandView> sumOnHandByVariantIdAndWarehouseId(Long variantId, Long warehouseId);
+
+  /**
+   * Available stock for {@code (variantId, warehouseId)} — the FR-9 read path.
+   *
+   * <p>{@code available = SUM(delta)} per pair. Because {@code ReserveInventoryUseCase} appends
+   * a {@code delta=-qty} ledger row for every active reservation, the ledger already reflects
+   * the reservation decrement — subtracting active reservations a second time would double-count.
+   *
+   * <p>The {@code activeReservations} projection is reported separately for ops visibility; the
+   * canonical {@code available} field is the simple ledger sum.
+   *
+   * <p>Returns {@code Optional} (empty when no ledger rows exist — variant unseen).
+   *
+   * <p>ponytail: JPQL enums need the FQN — {@code vn.vnpt.inventory.domain.ReservationStatus.ACTIVE}
+   * — because Hibernate doesn't infer enum constants from import statements.
+   */
+  @Query(
+      "SELECT new vn.vnpt.inventory.application.query.AvailableStockView("
+          + "  l.variantId, l.warehouseId,"
+          + "  COALESCE(SUM(l.delta), 0),"
+          + "  COALESCE((SELECT SUM(r.quantity) FROM InventoryReservation r"
+          + "    WHERE r.variantId = :variantId AND r.warehouseId = :warehouseId"
+          + "    AND r.status = vn.vnpt.inventory.domain.ReservationStatus.ACTIVE), 0),"
+          + "  COALESCE(SUM(l.delta), 0)) "
+          + "FROM InventoryLedgerEntry l "
+          + "WHERE l.variantId = :variantId AND l.warehouseId = :warehouseId "
+          + "GROUP BY l.variantId, l.warehouseId")
+  Optional<AvailableStockView> findAvailable(Long variantId, Long warehouseId);
+
+  /**
+   * Acquire a Postgres {@code SELECT … FOR UPDATE} row lock on all {@code inventory_ledger}
+   * rows for the {@code (variantId, warehouseId)} pair. The FR-9 canonical oversell guard
+   * (DI-01 root-cause fix): concurrent reserves serialize on this lock; the second commit sees
+   * the first's {@code -delta} and decremented reservation count, returning 409.
+   *
+   * <p>Called from {@code ReserveInventoryUseCase.reserve(...)} inside the {@code @Transactional}
+   * boundary. Returns the locked ledger rows (or empty list if none yet exist for the pair).
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT l FROM InventoryLedgerEntry l"
+          + " WHERE l.variantId = :variantId AND l.warehouseId = :warehouseId")
+  List<InventoryLedgerEntry> lockLedgerByVariantAndWarehouse(Long variantId, Long warehouseId);
 }

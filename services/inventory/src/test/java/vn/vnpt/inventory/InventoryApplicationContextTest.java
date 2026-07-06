@@ -72,7 +72,27 @@ class InventoryApplicationContextTest {
     assertThat(count).isEqualTo(1);
   }
 
-  /** V001 MUST create the canonical 4 business tables + Flyway's bookkeeping table. */
+  /** Story 1.6 — Flyway MUST have applied V003 (reservation table). */
+  @Test
+  void flywayAppliedV003() {
+    Integer count =
+        new JdbcTemplate(dataSource)
+            .queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '003'", Integer.class);
+    assertThat(count).isEqualTo(1);
+  }
+
+  /** Story 1.6 — Flyway MUST have applied V004 (outbox signatures column). */
+  @Test
+  void flywayAppliedV004() {
+    Integer count =
+        new JdbcTemplate(dataSource)
+            .queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '004'", Integer.class);
+    assertThat(count).isEqualTo(1);
+  }
+
+  /** V001 MUST create the canonical 4 business tables + Flyway's bookkeeping table; Story 1.6 adds inventory_reservation via V003. */
   @Test
   void allExpectedTablesExist() {
     Set<String> tables =
@@ -87,6 +107,7 @@ class InventoryApplicationContextTest {
         .containsExactlyInAnyOrder(
             "warehouses",
             "inventory_ledger",
+            "inventory_reservation",
             "outbox",
             "processed_event",
             "flyway_schema_history");

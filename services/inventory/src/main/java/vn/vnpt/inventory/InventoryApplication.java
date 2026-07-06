@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.modulith.ApplicationModule;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * InventoryService — second runnable Spring Boot module in the platform (after CatalogService from
@@ -49,8 +50,15 @@ import org.springframework.modulith.ApplicationModule;
  * ApplicationEventPublisher.publishEvent} for the in-process listener (the {@code
  * CatalogEventListener} consumes {@code CatalogProductCreated} from catalog).
  */
+/**
+ * Story 1.6 enables {@code @EnableScheduling} to activate Spring's {@code @Scheduled} post
+ * processor — the {@code ReservationSweeperJob} is the first {@code @Scheduled} job in the
+ * codebase. Boot 4's autoconfig detects {@code @Scheduled} on {@code @Component} classes; the
+ * {@code @EnableScheduling} annotation is required to activate the post processor.
+ */
 @SpringBootApplication
 @ComponentScan(basePackages = "vn.vnpt.inventory")
+@EnableScheduling
 @ApplicationModule(displayName = "inventory")
 public class InventoryApplication {
 

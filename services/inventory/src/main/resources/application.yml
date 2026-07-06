@@ -75,6 +75,10 @@ management:
   endpoint:
     health:
       show-details: always    # AC #22: `db` component must report PostgreSQL details
+    # Story 1.6 — exposes /actuator/scheduledtasks so the sweeper registration is observable
+    # (verification path for Story 10.x LGTM dashboards).
+    scheduledtasks:
+      enabled: true
 
 catalog:
   events:
@@ -83,6 +87,24 @@ catalog:
     # (ADR-18; deferred hardening). MUST match the producer's signing secret in
     # services/catalog/src/main/resources/application.yml `catalog.events.hmac-secret`.
     hmac-secret: ${catalog.events.hmac-secret:dev-only-secret-do-not-use-in-prod}
+
+# Story 1.6 — Reservation TTL + sweeper
+inventory:
+  reservation:
+    # Default TTL per epics.md line 530 + architecture.md line 311 (MAX_RESERVATION_TTL_MINUTES).
+    # Configurable per environment: dev=15min, staging=10min (faster sweeper validation),
+    # prod=15min default.
+    ttl-minutes: ${INVENTORY_RESERVATION_TTL_MINUTES:15}
+    # Sweeper poll interval. 30s = sweeper sees stale reservations within 30s of expiry.
+    # Architecture.md line 146 ADR-14 operational: this is service-local config, NOT the
+    # outbox poll-interval (500ms).
+    sweeper-interval-ms: ${INVENTORY_RESERVATION_SWEEPER_INTERVAL_MS:30000}
+    # Batch size per sweep tick — bounds DB lock duration.
+    sweeper-batch-size: ${INVENTORY_RESERVATION_SWEEPER_BATCH_SIZE:100}
+  events:
+    # Used by ReserveInventoryUseCase / ReleaseInventoryUseCase to sign outbound events
+    # (ADR-20 producer half). Production overrides via Vault at secret/events/hmac/inventory.
+    hmac-secret: ${INVENTORY_EVENTS_HMAC_SECRET:dev-only-secret-do-not-use-in-prod}
 
 logging:
   level:
