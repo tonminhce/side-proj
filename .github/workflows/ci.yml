@@ -50,6 +50,13 @@ jobs:
       - name: Unit tests (mvn -pl util -am test)
         run: mvn -pl util -am test
 
+      # Catalog gate transition (Story 1.1 → Story 1.2):
+      # Story 1.1 shipped with continue-on-error: true because the first service bootstrap landed
+      # in parallel with the test infra hardening. Story 1.2 (Product aggregate + variant graph)
+      # flipped the gate to blocking on 2026-07-07. A broken catalog build now blocks PR merge.
+      - name: Test catalog module (Story 1.2 — gate flipped to blocking)
+        run: mvn -pl services/catalog -am test
+
       # 2. Validate — proves all 17 <module> entries resolve.
       - name: Reactor validate (mvn validate)
         run: mvn validate
