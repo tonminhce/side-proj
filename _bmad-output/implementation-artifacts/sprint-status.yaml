@@ -16,7 +16,7 @@
 # Long keys are allowed; uniqueness is what matters.
 
 generated: 2026-07-06
-last_updated: 2026-07-06T17:15:00Z
+last_updated: 2026-07-07T00:52:00Z
 project: side-project
 project_key: NOKEY
 tracking_system: file-system
@@ -28,7 +28,7 @@ development_status:
   0-2-bootstrap-multi-module-maven-monorepo: done
   0-3-dev-docker-compose-postgres-kafka-kraft-es-redis-apicurio-minio: done
   0-4-ci-scaffold-github-actions-archunit-spotless-prettier: done
-  0-5-snowflake-strict-mode-r-22: backlog
+  0-5-snowflake-strict-mode-r-22: done
   epic-0-retrospective: optional
   epic-1: backlog  # Epic 1: Browse Catalog and Manage Inventory
   1-1-catalogservice-maven-module-bootstrap-per-service-postgres-db: backlog

@@ -4,9 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 /**
  * Story 0.5 / ADR-22 / R-08: covers the three branches of {@link
@@ -129,5 +134,67 @@ class SnowflakeIdGeneratorStrictModeTest {
     }
     long id = SnowflakeIdGenerator.getWorkerIdFromPod();
     assertTrue(id >= 0 && id < 8, "worker-id must be in [0,8), got " + id);
+  }
+
+  // ---- AC #4: WARN log line on dev fallback ----
+
+  @Test
+  void devProfile_missingPodName_emitsWarnLog() {
+    setActiveProfile("dev");
+    Logger logger = (Logger) LoggerFactory.getLogger(SnowflakeIdGenerator.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+    try {
+      SnowflakeIdGenerator.getWorkerIdFromPod();
+    } finally {
+      logger.detachAppender(appender);
+    }
+    assertEquals(1, appender.list.size(), "exactly one WARN event expected, got: " + appender.list);
+    ILoggingEvent event = appender.list.get(0);
+    assertEquals(Level.WARN, event.getLevel());
+    String formatted = event.getFormattedMessage();
+    assertTrue(
+        formatted.contains("SnowflakeIdGenerator: POD_NAME not set in profile 'dev'"),
+        "WARN message must include header: " + formatted);
+    assertTrue(
+        formatted.contains("falling back to SecureRandom"),
+        "WARN message must indicate fallback: " + formatted);
+  }
+
+  // ---- AC #3: WorkerIdMissingException is a RuntimeException ----
+
+  @Test
+  void workerIdMissingExceptionIsRuntimeException() {
+    // AC #3: "new class, RuntimeException subclass". Pinning the hierarchy guards against a
+    // refactor that swaps RuntimeException for checked Exception — that would break Spring's
+    // bean-factory failure mode (unchecked exceptions propagate as-is).
+    assertTrue(
+        RuntimeException.class.isAssignableFrom(WorkerIdMissingException.class),
+        "WorkerIdMissingException must extend RuntimeException per AC #3");
+  }
+
+  // ---- AC #7: full remediation hint in exception message ----
+
+  @Test
+  void prodProfile_missingPodName_exceptionMessageIncludesFullRemediationHint() {
+    setActiveProfile("prod");
+    String podName = System.getenv("POD_NAME");
+    if (podName != null && podName.matches(".*-\\d+$")) {
+      // Valid replica suffix → Branch A → no throw; can't exercise message here.
+      return;
+    }
+    WorkerIdMissingException ex =
+        assertThrows(WorkerIdMissingException.class, SnowflakeIdGenerator::getWorkerIdFromPod);
+    String msg = ex.getMessage();
+    // AC #7c mandates the full one-line hint, including the K8s downward-API clause.
+    assertTrue(msg.contains("(ADR-22)"), "msg must reference ADR-22: " + msg);
+    assertTrue(
+        msg.contains("K8s downward API: fieldRef: metadata.name"),
+        "msg must include K8s downward API hint: " + msg);
+    assertTrue(msg.contains("for local dev"), "msg must end with local-dev clause: " + msg);
+    assertTrue(
+        msg.contains("POD_NAME env var is required"),
+        "msg must open with the required-var statement: " + msg);
   }
 }

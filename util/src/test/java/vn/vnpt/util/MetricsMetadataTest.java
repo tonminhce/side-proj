@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import vn.vnpt.util.common.SnowflakeIdGenerator;
 
@@ -16,12 +18,32 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
  * doesn't ship a Prometheus registry, so the dotted Micrometer name is what we assert; Epic 10
  * wires Prometheus (Micrometer dot-to-underscore translation is built-in).
  *
- * <p>The first test asserts that exactly one source tag is registered. POD_NAME is whatever the
- * shell inherits — under {@code spring.profiles.active=dev} the bean factory's call to {@code
- * getWorkerIdFromPod()} returns either Branch A (podname=1) or Branch B (securerandom=2). Either
- * outcome is valid; the contract is "one of the two tags must be present with the right value".
+ * <p>Profile is forced to {@code dev} via {@code System.setProperty("spring.profiles.active",
+ * "dev")} so the bean factory's {@code getWorkerIdFromPod()} call never throws, regardless of shell
+ * env. This is the determinism guarantee: a developer running with {@code
+ * SPRING_PROFILES_ACTIVE=prod} in their shell doesn't see this test crash.
  */
 class MetricsMetadataTest {
+
+  private String savedActiveProfile;
+  private boolean activeProfileWasSet;
+
+  @BeforeEach
+  void pinDevProfile() {
+    savedActiveProfile = System.getProperty("spring.profiles.active");
+    activeProfileWasSet = savedActiveProfile != null;
+    // resolveActiveProfile() reads System property first, so this wins over SPRING_PROFILES_ACTIVE.
+    System.setProperty("spring.profiles.active", "dev");
+  }
+
+  @AfterEach
+  void restoreActiveProfile() {
+    if (activeProfileWasSet) {
+      System.setProperty("spring.profiles.active", savedActiveProfile);
+    } else {
+      System.clearProperty("spring.profiles.active");
+    }
+  }
 
   @Test
   void snowflakeWorkerIdSourceGaugeIsRegisteredWithExpectedSourceTag() {

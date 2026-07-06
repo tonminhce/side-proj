@@ -55,9 +55,12 @@ jobs:
         run: mvn validate
 
       # 3. ArchUnit — package-boundary enforcement. Fail-fast on cross-service
-      #    infra imports or forbidden API patterns.
+      #    infra imports or forbidden API patterns. The -Dtest filter matches
+      #    both classes by full name — wildcard '*ArchUnitTest' was a bug
+      #    (ModulithPackageBoundaryTest has no 'ArchUnit' substring), so the
+      #    Modulith rule was silently skipped from CI. Use exact class names.
       - name: ArchUnit package-boundary tests
-        run: mvn -pl util -am test -Dtest='*ArchUnitTest,*ForbiddenDependencyPatternsTest'
+        run: mvn -pl util -am test -Dtest='ModulithPackageBoundaryTest,ForbiddenDependencyPatternsTest'
 
       # 4. Spotless — Java format check. Fails the build on format drift.
       - name: Spotless check (Java)
@@ -70,7 +73,11 @@ jobs:
 
       # 6. Avro compat — runs only when .avsc files under services/** change.
       #    Sprint 0 has no .avsc files → step is skipped. Story 1.3 wires real
-      #    schemas; this gate then becomes binding.
+      #    schemas; this gate then becomes binding. The test target must point
+      #    at AvroCompatCheckCliTest (a JUnit class), not AvroCompatCheckCli
+      #    (the production CLI's main()) — surefire's -Dtest filter rejects
+      #    non-JUnit matches with "No tests matching pattern" and would fail
+      #    the build on the first .avsc change.
       - name: Detect changed Avro schemas
         id: avro-changed
         uses: dorny/paths-filter@v2
@@ -81,4 +88,4 @@ jobs:
 
       - name: Avro compatibility check (Apicurio)
         if: steps.avro-changed.outputs.avro == 'true'
-        run: mvn -pl util test -Dtest=AvroCompatCheckCli -q
+        run: mvn -pl util test -Dtest=AvroCompatCheckCliTest -q

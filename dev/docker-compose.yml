@@ -105,7 +105,7 @@ services:
         condition: service_healthy
     networks: [platform-net]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/apis/registry/v2/groups || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/apis/registry/v2/groups >/dev/null || exit 1"]
       <<: *health-defaults
 
   # ---- Redis (rate-limiter state, ADR-13) ----
@@ -119,10 +119,12 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       <<: *health-defaults
 
-  # ---- Elasticsearch (single-node, analysis-vn plugin baked in via Dockerfile) ----
+  # ---- Elasticsearch (single-node) ----
+  # Vietnamese analyzer lives at the application layer (Story 6.2). The story
+  # template asked for an `analysis-vn` plugin, but neither `analysis-vn` nor
+  # `analysis-stconvert` exists in the ES plugin repo — see Completion Notes.
   elasticsearch:
-    build:
-      context: ./elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -149,6 +151,11 @@ services:
       <<: *health-defaults
 
   # ---- OPA admission controller (ADR-19 / NFR-SEC-3) ----
+  # The OPA image (openpolicyagent/opa:latest) is distroless — no shell, no
+  # wget/curl. An in-container healthcheck is impractical, so we disable it
+  # and rely on smoke.sh + manual verification (curl http://localhost:8181/health).
+  # OPA is a leaf service (no other service depends on it being healthy), so
+  # the absence of a compose healthcheck does not block startup ordering.
   opa:
     image: openpolicyagent/opa:latest
     command: ["run", "--server", "--addr=:8181", "/policies"]
@@ -157,5 +164,4 @@ services:
     volumes:
       - ../../platform/policies/opa:/policies:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8181/health || exit 1"]
-      <<: *health-defaults
+      disable: true

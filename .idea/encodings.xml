@@ -1,7 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/bff/admin-bff/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/bff/admin-bff/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/bff/storefront-bff/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/bff/storefront-bff/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/admin/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/admin/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/cart/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/cart/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/catalog/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/catalog/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/checkout/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/checkout/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/customer/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/customer/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/fulfillment/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/fulfillment/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/inventory/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/inventory/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/invoice/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/invoice/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/notification/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/notification/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/order/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/order/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/payment/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/payment/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/pricing/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/pricing/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/returns/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/returns/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/search/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/search/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/util/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/util/src/main/resources" charset="UTF-8" />
   </component>
 </project>

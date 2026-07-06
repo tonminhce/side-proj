@@ -32,11 +32,11 @@ report() {
   fi
 }
 
-# 1. Postgres
-if dc exec -T postgres pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-app}" >/dev/null 2>&1; then
-  report 0 "postgres: pg_isready"
+# 1. Postgres (AC #12: SELECT 1 — proves the query engine is up, not just the port)
+if dc exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-app}" -tAc "SELECT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: SELECT 1"
 else
-  report 1 "postgres: pg_isready"
+  report 1 "postgres: SELECT 1"
 fi
 
 # 2. Kafka

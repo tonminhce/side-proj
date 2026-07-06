@@ -10,7 +10,7 @@ Expected time-to-healthy: **~60 s** on a warm cache.
 |----------------|-----------|----------------------------------------------------------|
 | Postgres       | `5432`    | user `postgres`, db `app`, pwd `postgres` (dev only)      |
 | Kafka          | `9092`    | KRaft, single-node, internal listeners + PLAINTEXT host  |
-| Elasticsearch  | `9200`    | single-node, `analysis-vn` plugin installed              |
+| Elasticsearch  | `9200`    | single-node (8.15.0); Vietnamese analyzer is application-layer (Story 6.2) |
 | Redis          | `6379`    | `maxmemory-policy allkeys-lru`                           |
 | Apicurio       | `8081`    | 2.6 in-memory, Kafka-backed                              |
 | MinIO S3 API   | `9000`    | creds `minio` / `minio123` (dev only)                    |

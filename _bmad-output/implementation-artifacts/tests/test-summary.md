@@ -1,105 +1,115 @@
-# Test Automation Summary — Story 0.2 (Multi-module Maven monorepo bootstrap)
+# Test Automation Summary — Story 0.5
 
-**Story:** `_bmad-output/implementation-artifacts/0-2-bootstrap-multi-module-maven-monorepo.md`
+**Story:** Snowflake strict mode (R-22 / OP-05 / R-08) — throw if `POD_NAME` missing in non-dev profile
+**Story file:** `_bmad-output/implementation-artifacts/0-5-snowflake-strict-mode-r-22.md`
 **Workflow:** `bmad-qa-generate-e2e-tests`
-**Date:** 2026-07-06
-**Scope note:** Story 0.2 is pure **pom.xml + directory scaffolding** — zero Java source added, zero behavior change. Dev Notes correctly state "no new tests required," so no API or E2E tests were generated (no APIs, no UI exist yet). Auto-applied only the gap that the AC's manual verification steps (`mvn validate`, groupId review, BOM re-import review) had no automated guard for.
+**Test framework:** JUnit 5 (existing) — no new framework introduced
+**Test command:** `mvn -pl util -am test`
+**Date:** 2026-07-07
 
-## Generated Tests
+---
 
-### API Tests
-- _N/A — no `@RestController` or service endpoints exist in any of the 14 placeholder service modules._
+## Generated / Added Tests
 
-### E2E Tests
-- _N/A — `frontend/storefront/` and `frontend/admin/` are empty placeholder dirs; Next.js scaffold arrives with Epic 2 (storefront checkout flow) and Epic 5/8 (admin) per the dev notes._
+### Existing tests from Story 0.5 implementation (commit `997b262`)
 
-### Regression (existing — must remain green)
-- [x] `util/src/test/java/vn/vnpt/util/common/excel/ExcelImportExportHelperTest.java` — 15/15 pass.
-- [x] `util/src/test/java/vn/vnpt/util/UtilsAutoConfigurationMetadataTest.java` — 2/2 pass (Story 0.1 R-01 regression guard).
+| Path | Cases | Covers |
+|------|------:|--------|
+| `util/src/test/java/vn/vnpt/util/common/SnowflakeIdGeneratorStrictModeTest.java` | 5 | AC #3 throw path (Branch C) + Branch B dev fallback + Branch A valid replica-suffix parse |
+| `util/src/test/java/vn/vnpt/util/MetricsMetadataTest.java` | 2 | AC #5 — `snowflake.worker.id.source` gauge with `source` tag and dotted/underscored name discoverability |
 
-### Gap-fill (auto-applied)
-- [x] `util/src/test/java/vn/vnpt/util/RootPomReactorMetadataTest.java` — 4/4 pass. One new test class, stdlib `javax.xml.parsers` + `java.nio.file`, no new dependencies.
+### QA-pass gap fixes (this workflow run)
 
-  | Test | Guards | Asserts |
-  |------|--------|---------|
-  | `ac8_rootGroupIdIsVnVnpt` | AC #8 / `CONVENTIONS.md` §2 "Java modules (Maven)" | root `<groupId> = vn.vnpt` (replaces the original `org.example` placeholder) |
-  | `ac7_rootPackagingIsPom` | AC #7 | root `<packaging> = pom</packaging>` (reactor parent — never `jar`/`war`) |
-  | `ac7_modulesCountIs17AndAllPathsExist` | AC #3, #4, #7 / Subtask 5.4 | exactly 17 `<module>` entries (util + 14 services + 2 BFFs) and **every path resolves to an existing directory** — replaces the manual `mvn validate` check with a CI-runnable assertion |
-  | `ac9_rootPomDoesNotReimportSpringBootOrCloudBoms` | R-09 / `architecture-detail.md` §"Detail: ADR-01" line 97 | root pom does NOT contain `spring-boot-dependencies` or `spring-cloud-dependencies` — `util/pom.xml` owns them so services inherit transitively without version skew |
+| Path | Cases | Gap addressed |
+|------|------:|---------------|
+| `util/src/test/java/vn/vnpt/util/common/SnowflakeIdGeneratorStrictModeTest.java` | +3 | AC #4 WARN log assertion, AC #3 RuntimeException hierarchy, AC #7 full remediation hint (`(ADR-22)`, `K8s downward API: fieldRef: metadata.name`, `for local dev`) |
+| `util/src/test/java/vn/vnpt/util/MetricsMetadataTest.java` | (refactor, no case Δ) | Latent fragility: a developer running `mvn test` with `SPRING_PROFILES_ACTIVE=prod` in shell would crash this test (bean factory throws `WorkerIdMissingException` before gauge registration). Fix pins `spring.profiles.active=dev` via `@BeforeEach` + restore via `@AfterEach`. |
 
-## Framework
-
-- JUnit 5 (`org.junit.jupiter.api.Test`) — matches existing `UtilsAutoConfigurationMetadataTest` pattern from Story 0.1.
-- Maven Surefire 3.5.4 + `JUnitPlatformProvider` — already wired by `spring-boot-starter-test`.
-- Stdlib XML parser (`javax.xml.parsers.DocumentBuilderFactory`) + `java.nio.file` — no new dependencies.
-
-## Test Run
-
-```
-$ mvn -pl util -am test
-[INFO] Running vn.vnpt.util.common.excel.ExcelImportExportHelperTest
-[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running vn.vnpt.util.UtilsAutoConfigurationMetadataTest
-[INFO] Tests run: 2,  Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running vn.vnpt.util.RootPomReactorMetadataTest
-[INFO] Tests run: 4,  Failures: 0, Errors: 0, Skipped: 0
-[INFO] Results:
-[INFO] Tests run: 21, Failures: 0, Errors: 0, Skipped: 0
-[INFO] BUILD SUCCESS
-```
-
-```
-$ mvn validate
-[INFO] util 0.0.1-SNAPSHOT ................................. SUCCESS
-[INFO] side-project 1.0.0-SNAPSHOT ......................... SUCCESS
-[INFO] catalog 1.0.0-SNAPSHOT ............................. SUCCESS
-... (14 services) ...
-[INFO] storefront-bff 1.0.0-SNAPSHOT ...................... SUCCESS
-[INFO] admin-bff 1.0.0-SNAPSHOT ........................... SUCCESS
-[INFO] BUILD SUCCESS
-```
-
-- **Regression count:** 17/17 (Story 0.1 baseline) → **21/21** (4 new guard tests added).
-- **Negative check (executed):** flipped root `<groupId>` to `org.example` and ran the suite. The reactor build aborted before the test phase — `Non-resolvable parent POM for vn.vnpt:admin:1.0.0-SNAPSHOT` for every child. This is **stronger than the JUnit assertion**: the build itself is the primary guard against groupId drift. `pom.xml` was restored. (See "Skipped" — this validates the design choice that the BOM-not-reimported test is the only one that won't be caught by the build itself.)
+---
 
 ## Coverage
 
-| Invariant introduced in Story 0.2 | Test surface | Coverage |
-|---|---|---|
-| Root `<groupId> = vn.vnpt` (was `org.example`) | `RootPomReactorMetadataTest.ac8_rootGroupIdIsVnVnpt` + reactor build itself | ✅ (test + build) |
-| Root `<packaging> = pom</packaging>` (reactor parent) | `RootPomReactorMetadataTest.ac7_rootPackagingIsPom` | ✅ |
-| 17 modules exist on disk (util + 14 services + 2 BFFs) | `RootPomReactorMetadataTest.ac7_modulesCountIs17AndAllPathsExist` + `mvn validate` | ✅ (test + build) |
-| Root pom does NOT re-import Spring Boot / Cloud BOMs (R-09) | `RootPomReactorMetadataTest.ac9_rootPomDoesNotReimportSpringBootOrCloudBoms` | ✅ (test only — build won't catch this) |
-| `util`'s Spring Boot 4 autoconfig contract (Story 0.1 R-01 regression) | `UtilsAutoConfigurationMetadataTest` (regression carry-over) | ✅ 2/2 |
-| Excel import/export behavior (Story 0.1 regression) | `ExcelImportExportHelperTest` (regression carry-over) | ✅ 15/15 |
+| AC | Before this QA pass | After this QA pass | Notes |
+|----|--------------------:|-------------------:|-------|
+| #3 throw + `RuntimeException` subclass | Throw ✅, hierarchy ❌ | Throw ✅, hierarchy ✅ | New `workerIdMissingExceptionIsRuntimeException` |
+| #4 dev fallback + **WARN log** | Fallback ✅, log ❌ | Fallback ✅, log ✅ | New `devProfile_missingPodName_emitsWarnLog` (Logback `ListAppender`) |
+| #5 gauge shape (`snowflake.worker.id.source`, source tag, value 1.0/2.0) | ✅ | ✅ | unchanged |
+| #6 test count ≥34 | 39 actual | 42 actual | +3 from QA pass |
+| #7 message: profile + POD_NAME + remediation hint | Partial (3 substrings) | Full (5 substrings incl. K8s hint) | New `prodProfile_missingPodName_exceptionMessageIncludesFullRemediationHint` |
+| Determinism (shell env isolation) | Latent fragility | Pinned | `MetricsMetadataTest` `@BeforeEach`/`@AfterEach` |
 
-## Checklist Validation (`checklist.md`)
+### Test count
 
-- [x] API tests generated (if applicable) — N/A, no endpoints exist
-- [x] E2E tests generated (if UI exists) — N/A, no UI exists
-- [x] Tests use standard test framework APIs — JUnit 5 + Surefire, matches Story 0.1 pattern
-- [x] Tests cover happy path — 4 invariants, each with expected value asserted
-- [x] Tests cover 1-2 critical error cases — N/A for metadata checks; the test failing IS the error case
-- [x] All generated tests run successfully — 21/21 pass
-- [x] Tests use proper locators (semantic, accessible) — N/A (no UI); XML DOM and substring asserts are unambiguous
-- [x] Tests have clear descriptions — AC#-prefixed method names + class Javadoc
-- [x] No hardcoded waits or sleeps — none
-- [x] Tests are independent (no order dependency) — each test parses its own `Document`/reads its own file
-- [x] Test summary created — this file (overwrites Story 0.1's summary by design — one summary per story)
-- [x] Tests saved to appropriate directories — `util/src/test/java/vn/vnpt/util/`
-- [x] Summary includes coverage metrics — see table above
+| Stage | Count | Δ |
+|-------|------:|---:|
+| Story 0.4 baseline | 32 | — |
+| Story 0.5 implementation commit `997b262` | 39 | +7 (5 strict-mode + 2 metrics) |
+| **This QA pass** | **42** | **+3 (AC #4 WARN log + AC #7 full hint + AC #3 hierarchy)** |
+
+**`mvn -pl util -am test` → 42/42 green** (verified locally, 2026-07-07).
+
+### Other CI gates verified
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Spotless Java | `mvn -pl util spotless:check` | BUILD SUCCESS (Spotless auto-applied 1 file pre-edit) |
+
+---
+
+## Discovered gaps (auto-applied)
+
+1. **MEDIUM — AC #4 WARN log line was not asserted.** `devProfile_missingPodName_returnsRandomAndLogsWarn` had "LogsWarn" in its name but only checked the returned worker-id; if the `log.warn(...)` call were deleted, the test would still pass. **Fix applied:** new `devProfile_missingPodName_emitsWarnLog` attaches a Logback `ListAppender` to `SnowflakeIdGenerator`'s logger, invokes the method, asserts exactly one `Level.WARN` event with the formatted message containing both `SnowflakeIdGenerator: POD_NAME not set in profile 'dev'` and `falling back to SecureRandom`. Detach in `finally` so other tests aren't polluted.
+
+2. **MEDIUM — AC #7 remediation hint was only partially asserted.** Original test checked for three substrings (`profile 'prod'`, `POD_NAME='`, `spring.profiles.active=dev`). AC #7 mandates the full one-liner including `(ADR-22)` reference and the `K8s downward API: fieldRef: metadata.name` clause. If a future refactor drops either, the original test would still pass. **Fix applied:** new `prodProfile_missingPodName_exceptionMessageIncludesFullRemediationHint` asserts all four additional clauses.
+
+3. **LOW — AC #3 RuntimeException hierarchy not pinned.** AC #3 says "new class, `RuntimeException` subclass". A refactor that swaps `extends RuntimeException` for `extends Exception` (checked) would break Spring's bean-factory propagation semantics. **Fix applied:** new `workerIdMissingExceptionIsRuntimeException` asserts `RuntimeException.class.isAssignableFrom(WorkerIdMissingException.class)`.
+
+4. **LOW — `MetricsMetadataTest` inherits shell profile env.** Both tests construct `UtilsAutoConfiguration` and call `snowflakeIdGenerator()` which calls `getWorkerIdFromPod()` first. If the developer has `SPRING_PROFILES_ACTIVE=prod` in their shell (and POD_NAME is unset or malformed), the bean factory throws before gauge registration. Test passes locally only because of a happy shell. **Fix applied:** `@BeforeEach` sets `spring.profiles.active=dev` (read first by `resolveActiveProfile()`); `@AfterEach` restores. Test is now deterministic across shell envs.
+
+### Gaps NOT addressed (deliberately skipped)
+
+| Gap | Why skipped | When to revisit |
+|-----|-------------|-----------------|
+| `prodProfile_validPodName_returnsParsedWorkerId` (Branch A) is auto-skipping in this JVM | We can't mutate env vars from inside the JVM. The test correctly guards on `podName.matches(".*-\\d+$")` and skips when env is unset. The product path is covered manually per Subtask 5.4 (`POD_NAME=catalog-prod-3 mvn -pl util -am test`). | When Java ships a stable, in-process env-mutation API (e.g., JEP on `System.mutateEnv`). Today: ponytail — env mutation hacks aren't worth the flakiness. |
+| Profile resolution order (System property vs env var precedence) — Subtask 2.1 | Indirectly tested: setting system property in tests works, and `resolveActiveProfile()` is a 7-line private static helper. A dedicated test would need to mock env vars, which the JDK doesn't support without tools like `SystemLambda` (a test-scope dep we explicitly avoid per YAGNI). | When a refactor touches `resolveActiveProfile()`. |
+| `gaugeIsDiscoverableUnderBothDottedAndUnderscoredNames` only verifies one of the two names | The Prometheus (`snowflake_worker_id_source`) name is only registered when `micrometer-registry-prometheus` is on classpath. util/ doesn't ship that today. The test correctly accepts either, and the `SimpleMeterRegistry` path is the only one available. | Epic 10 (observability stack) — when Prometheus wiring lands, expand this test to assert both names simultaneously. |
+
+---
+
+## Validation against `checklist.md`
+
+### Test Generation
+
+- [x] API tests generated (if applicable) — N/A (util library, no REST endpoints)
+- [x] E2E tests generated (if UI exists) — N/A (Sprint 0, no UI)
+- [x] Tests use standard test framework APIs — JUnit 5 + Logback `ListAppender` (already on classpath via `spring-boot-starter-test`); no new test-scope deps
+- [x] Tests cover happy path — Branch A (valid replica suffix), Branch B (dev fallback), metric registration
+- [x] Tests cover 1-2 critical error cases — Branch C throw path; multiple message-substring assertions; RuntimeException hierarchy; missing/malformed POD_NAME in non-dev profile
+
+### Test Quality
+
+- [x] All generated tests run successfully — 42/42 green; full suite green
+- [x] Tests use proper locators (semantic, accessible) — N/A (no DOM; tests target Java APIs)
+- [x] Tests have clear descriptions — method names describe outcome (`devProfile_missingPodName_emitsWarnLog`, `workerIdMissingExceptionIsRuntimeException`, `prodProfile_missingPodName_exceptionMessageIncludesFullRemediationHint`)
+- [x] No hardcoded waits or sleeps — none used (tests run in <30 ms total)
+- [x] Tests are independent (no order dependency) — each test restores `spring.profiles.active` via `@AfterEach`; Logback appender detached in `finally`
+
+### Output
+
+- [x] Test summary created — this file
+- [x] Tests saved to appropriate directories — `util/src/test/java/vn/vnpt/util/common/` + `util/src/test/java/vn/vnpt/util/`
+- [x] Summary includes coverage metrics — see Coverage table
+
+### Validation
+
+**Expected:** All tests pass ✅
+**Actual:** `mvn -pl util -am test` → Tests run: 42, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS.
+
+---
 
 ## Next Steps
 
-- Stories 0.3 (docker-compose), 0.4 (CI scaffold), 0.5 (`util/SnowflakeIdGenerator`) may add their own tests; this class guards the **monorepo** invariants and is not a substitute for per-module tests.
-- The first Epic that lands service code should add per-service unit + integration tests; `RootPomReactorMetadataTest` is the *reactor-level* guard.
-- `mvn -pl util -am test` should be wired into CI (Story 0.4). Failure of any of the 4 new tests means a Story 0.2 invariant regressed.
-
-## Skipped
-
-- **API tests** — no controllers exist. Add when the first service exposes its first `@RestController` (likely Epic 1, catalog service per the dev notes' Epic-order convention).
-- **E2E / Playwright** — `frontend/` is empty placeholder dirs. Add when the storefront-app lands (Epic 2 checkout flow) and admin-app (Epic 5/8).
-- **Per-service `pom.xml` validation tests** — the 4-test class already covers the union (module count, existence, groupId, packaging, BOMs); per-module tests would duplicate the same invariants at lower scope.
-- **`<relativePath>` test** — the Subtask 5.4 footgun (children initially missing `<relativePath>`) is now caught transitively by `ac7_modulesCountIs17AndAllPathsExist` (dirs exist) + `mvn validate` from root (parent reference must resolve). A direct `<relativePath>` assertion would duplicate `mvn validate` running in CI.
-- **Test that root pom re-imports BOMs (positive case)** — explicitly out of scope; the test asserts the negative invariant and the architecture forbids the positive case. A "must include" test would invite the regression R-09 was filed to prevent.
-- **Spring `@SpringBootTest` context test for the reactor** — would require booting all 17 modules, none of which have a Spring application class yet (they're `<packaging>pom</packaging>`). Prohibitively expensive for the invariant being guarded.
+1. **Commit QA pass.** Three new tests in `SnowflakeIdGeneratorStrictModeTest` + profile-pinning refactor in `MetricsMetadataTest`. Branch: stay on `fix/r-01-util-parent-pom` per Sprint 0 sequential pattern (Story 0.5 already lives there). Suggested prefix: `test(util): QA-pass gap fills — WARN log + ADR-22 hint + RuntimeException hierarchy + MetricsMetadata shell-env isolation (Story 0.5)`.
+2. **Spotless auto-applied** to `MetricsMetadataTest.java` (one Javadoc line-wrap) before this summary was written — already committed in working tree.
+3. **Story 0.5 PR** (commit `997b262`) is the carrier; this QA pass should ride it as a second commit on the same branch.
+4. **Epic 10 (observability)** will exercise the `gaugeIsDiscoverableUnderBothDottedAndUnderscoredNames` test's other branch once `micrometer-registry-prometheus` lands in util/pom.xml.
