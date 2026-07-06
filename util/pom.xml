@@ -13,8 +13,6 @@
 
     <properties>
         <java.version>25</java.version>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>4.0.0</spring-boot.version>
         <spring-cloud.version>2025.1.0</spring-cloud.version>
@@ -244,6 +242,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
                 <configuration>
                     <release>25</release>
                     <annotationProcessorPaths>
@@ -263,6 +262,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>4.0.0</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>

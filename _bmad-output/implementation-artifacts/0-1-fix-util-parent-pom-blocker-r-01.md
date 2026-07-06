@@ -1,6 +1,6 @@
 # Story 0.1: Fix util/ parent pom blocker (R-01)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -148,7 +148,7 @@ The `-am` flag is harmless here (no other modules to "also-make") but matches th
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude (story-automator review), 2026-07-06
 
 ### Debug Log References
 
@@ -181,6 +181,7 @@ The `-am` flag is harmless here (no other modules to "also-make") but matches th
 - `.idea/vcs.xml` (already staged pre-session; included in commit `cac5441` — IDE VCS mapping, harmless)
 - Commit `cac5441`: `fix(util): replace parent with inline dependencyManagement (R-01)` — covers pom, local-docs/10, architecture-detail, .idea/vcs.xml
 - Follow-up commit (this review's amendment): stage story file, regression-guard test, test summary, sprint-status
+- Re-review commit (this review's amendment 2): pin `maven-compiler-plugin:3.14.1` + `spring-boot-maven-plugin:4.0.0` (eliminates Maven `build.plugins.plugin.version` warnings now that the inherited parent is gone); drop redundant `maven.compiler.source/target` (subsumed by `<release>25</release>`); fill unfilled `{{agent_model_name_version}}` placeholder; promote story status `review → done`; sync sprint-status
 
 ### Senior Developer Review (AI)
 
@@ -220,3 +221,18 @@ The `-am` flag is harmless here (no other modules to "also-make") but matches th
 #### Outcome
 
 **Approve** — all 7 acceptance criteria pass under live re-verification. The 3 HIGH findings were documentation drift (story hadn't recorded the regression-guard test or its own file), not implementation defects. The fix in `util/pom.xml` is correct and minimal.
+
+#### Re-review (story-automator-review, 2026-07-06T22:23Z)
+
+**Method:** Re-ran `mvn clean install -DskipTests` + `mvn test` from `util/` after the prior review's fixes. Live AC verification: 17/17 tests pass; no Maven `build.plugins.plugin.version` warnings; no regression in `ExcelImportExportHelperTest` (15/15) or `UtilsAutoConfigurationMetadataTest` (2/2).
+
+**Findings this pass (auto-fixed):**
+
+| # | Sev | Finding | Fix applied |
+|---|---|---|---|
+| F9 | MEDIUM | `maven-compiler-plugin` and `spring-boot-maven-plugin` had no `<version>` — Maven emitted WARN `'build.plugins.plugin.version' for org.apache.maven.plugins:maven-compiler-plugin is missing`. Spring Boot 4 BOM pins these (3.14.1 / 4.0.0) but via `<pluginManagement>` only; the removed parent would have inherited them. Build worked (Maven 3.9.16 default = 3.15.0) but was fragile across Maven versions. | Pinned to BOM-managed values: `maven-compiler-plugin:3.14.1`, `spring-boot-maven-plugin:4.0.0`. Warnings gone. |
+| F10 | LOW | Story line 151 still had the unfilled template placeholder `{{agent_model_name_version}}`. | Replaced with `Claude (story-automator review), 2026-07-06`. |
+| F6 (residual) | LOW | `<maven.compiler.source>` and `<maven.compiler.target>` were redundant given `<release>25</release>`. | Dropped both — `<release>` is the authoritative setting. |
+| Status sync | — | Story Status still `review`; sprint-status still `review` after live AC verification. | Story `review → done`; sprint-status `0-1-fix-util-parent-pom-blocker-r-01: review → done`; `last_updated` advanced to `2026-07-06T22:23:00Z`. |
+
+**Final outcome:** **Approve.** All 7 ACs PASS under live re-verification, no HIGH findings remain. Story is ready to merge.

@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env PROJECT_ROOT=/Users/tonminh-mac/IdeaProjects/side-proj/.claude/skills/bmad-story-automator /Users/tonminh-mac/IdeaProjects/side-proj/.claude/skills/bmad-story-automator/scripts/story-automator run story-automator stop-hook",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env PROJECT_ROOT=/Users/tonminh-mac/IdeaProjects/side-proj /Users/tonminh-mac/IdeaProjects/side-proj/.claude/skills/bmad-story-automator/scripts/story-automator stop-hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
