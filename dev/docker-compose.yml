@@ -1,0 +1,161 @@
+# dev/docker-compose.yml — Story 0.3
+# Local-dev infrastructure only (no application services).
+# Application services (catalog, inventory, ...) arrive with their Epic stories.
+# Bring up: `docker compose up -d`   |   Reset: `docker compose down -v`
+
+name: ecommerce-platform
+
+networks:
+  platform-net:
+    driver: bridge
+
+volumes:
+  pg-data: {}
+  kafka-data: {}
+  es-data: {}
+  redis-data: {}
+  minio-data: {}
+
+# Default healthcheck timings (Subtask 2.11). Override per service if needed.
+x-health-defaults: &health-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+services:
+
+  # ---- Postgres (single instance for Sprint 0) ----
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports: ["5432:5432"]
+    networks: [platform-net]
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      <<: *health-defaults
+
+  # ---- Kafka (KRaft, single-node, no Zookeeper) ----
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-ecommerce-platform-cluster}
+    ports: ["9092:9092"]
+    networks: [platform-net]
+    volumes: [kafka-data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:9092 >/dev/null 2>&1"]
+      <<: *health-defaults
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [platform-net]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.products.product      --partitions 6  --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.inventory.stock-item  --partitions 8  --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic order.lifecycle           --partitions 12 --config retention.ms=7776000000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic order.saga.commands       --partitions 12 --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic order.saga.replies        --partitions 12 --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payment.events            --partitions 8  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic rating.events             --partitions 6  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic recommendation.events      --partitions 8  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic promotion.events          --partitions 4  --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cart.events               --partitions 6  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic notification.events       --partitions 8  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic delivery.events           --partitions 6  --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic audit.events              --partitions 6  --config retention.ms=604800000
+        echo "kafka-init: created canonical topics"
+
+  # ---- Apicurio Schema Registry (in-memory, Kafka-backed) ----
+  # Tag pinned to 2.6.13.Final (latest stable on Docker Hub at 2025-07-16).
+  # The story template wrote "2.6.x" — that literal does NOT exist on Docker Hub;
+  # only the .Final SemVer tags do. `2.6.x-release` is a floating tag we avoid
+  # so behavior is reproducible (matches Story 0.2's pin-everything discipline).
+  apicurio:
+    image: apicurio/apicurio-registry-mem:2.6.13.Final
+    environment:
+      REGISTRY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REGISTRY_AUTH_ANONYMOUS_READ_ACCESS_ENABLED: "true"
+    ports: ["8081:8080"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [platform-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/apis/registry/v2/groups || exit 1"]
+      <<: *health-defaults
+
+  # ---- Redis (rate-limiter state, ADR-13) ----
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    networks: [platform-net]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      <<: *health-defaults
+
+  # ---- Elasticsearch (single-node, analysis-vn plugin baked in via Dockerfile) ----
+  elasticsearch:
+    build:
+      context: ./elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports: ["9200:9200"]
+    networks: [platform-net]
+    volumes: [es-data:/usr/share/elasticsearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      <<: *health-defaults
+
+  # ---- MinIO (object storage for product media) ----
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+    ports: ["9000:9000", "9001:9001"]
+    networks: [platform-net]
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live >/dev/null"]
+      <<: *health-defaults
+
+  # ---- OPA admission controller (ADR-19 / NFR-SEC-3) ----
+  opa:
+    image: openpolicyagent/opa:latest
+    command: ["run", "--server", "--addr=:8181", "/policies"]
+    ports: ["8181:8181"]
+    networks: [platform-net]
+    volumes:
+      - ../../platform/policies/opa:/policies:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8181/health || exit 1"]
+      <<: *health-defaults
