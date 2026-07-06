@@ -4,7 +4,7 @@ baseline_commit: 454c85205539af42207a1194b3cb2b7cf3aa230b
 
 # Story 0.2: Bootstrap multi-module Maven monorepo
 
-Status: review
+Status: done
 
 <!-- Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -209,11 +209,12 @@ claude-opus-4-8
 - Verification:
   - `mvn validate` → BUILD SUCCESS (all 17 module paths resolve)
   - `mvn -pl util -am clean install -DskipTests` → BUILD SUCCESS, exit 0
-  - `mvn -pl util -am test` → 17/17 pass (15/15 ExcelImportExportHelperTest + 2/2 UtilsAutoConfigurationMetadataTest)
+  - `mvn -pl util -am test` → **21/21 pass** (15/15 ExcelImportExportHelperTest + 2/2 UtilsAutoConfigurationMetadataTest + **4/4 RootPomReactorMetadataTest**). The 4-test `RootPomReactorMetadataTest` is the bmad-qa-generate-e2e-tests gap-fill guard for AC #3/#4/#7/#8/#9 — added in the `chore(monorepo): add reactor metadata guard` follow-up commit; see File List.
   - `util` autoconfig imports file: byte-for-byte unchanged (`git hash 6b79912c0ded051c8a88a35b593615dc5940fe76`)
-- Single commit on `fix/r-01-util-parent-pom`: `8a8295a feat(monorepo): bootstrap multi-module Maven reactor (Story 0.2)`. Push + PR open pending GitHub credentials (see Task 6.4).
+- Single feature commit on `fix/r-01-util-parent-pom`: `8a8295a feat(monorepo): bootstrap multi-module Maven reactor (Story 0.2)`. Plus follow-up commit `chore(monorepo): add reactor metadata guard (Story 0.2 review follow-up)` for the test + summary. Push + PR open pending GitHub credentials (see Task 6.4).
 - R-01 closure: util is now a member of a real reactor, with parent = root pom. Story 0.1's inline-BOM fix in `util/pom.xml` is preserved unchanged; root pom does not re-import.
 - R-09 mitigation: any future `services/<name>/pom.xml` will inherit Spring Boot 4.0.0 + Spring Cloud 2025.1.0 BOMs transitively through `util`, eliminating the Boot 4 ecosystem version-skew risk.
+- **Reviewer feedback applied (AI):** Story 0.2 review found 3 HIGH-severity findings — (1) untracked regression guard `RootPomReactorMetadataTest.java`, (2) modified `tests/test-summary.md`, (3) test-count documentation drift ("17/17" → "21/21"). All three fixed in the follow-up commit above.
 
 ### File List
 
@@ -230,3 +231,9 @@ claude-opus-4-8
 - `docs/adr/0001-record-architecture-decisions.md`
 - `.gitkeep` markers under `frontend/{storefront,admin,packages/{ui,types,eslint-config}}`, `platform/{observability/{otel-config,grafana-dashboards,prometheus-rules,loki-schemas,tempo-config},policies/opa,chaos/chaos-mesh,runbooks,ci-cd/{.github/workflows,argocd}}`, `dev/seed-data/`, `helm/<14 service names>/`, `docs/{diagrams,runbooks,slos,tutorials}/`
 - `_bmad-output/implementation-artifacts/0-2-bootstrap-multi-module-maven-monorepo.md` (story status / checkboxes updated)
+
+**Modified (1, follow-up):**
+- `_bmad-output/implementation-artifacts/tests/test-summary.md` — rewritten for Story 0.2 (was Story 0.1's summary).
+
+**Created (1, follow-up):**
+- `util/src/test/java/vn/vnpt/util/RootPomReactorMetadataTest.java` — 4-test guard for AC #3/#4/#7/#8/#9 (groupId, packaging, 17 modules + paths exist, no root BOM re-import). Stdlib XML parser only, no new dependencies.
