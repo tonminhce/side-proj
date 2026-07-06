@@ -4,7 +4,7 @@ baseline_commit: f3f3144
 
 # Story 0.4: CI scaffold (GitHub Actions + Archunit + Spotless + Prettier)
 
-Status: review
+Status: done
 
 <!-- Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -262,14 +262,15 @@ claude-sonnet (project-dev) — BMAD bmad-dev-story workflow v1
 - **Spec mismatch on Spotless version:** spec called for 2.46.0; bumped to 3.8.0 (latest stable). Reason: 2.46.0's google-java-format uses `com.sun.tools.javac.util.Log$DeferredDiagnosticHandler.getDiagnostics()` which was removed in JDK 26 → `NoSuchMethodError`. 3.8.0 bundles a newer google-java-format that works on both JDK 25 (CI) and JDK 26 (local). Exact version pin policy preserved (no `2.x`/`3.x` floating).
 - **Spec mismatch on apicurio artifact:** spec named `apicurio-registry-client:2.6.13.Final` but that artifact is the REST client — it does NOT contain `AvroCompatChecker`. The correct artifact is `apicurio-registry-schema-util-avro:2.6.13.Final`, which provides `io.apicurio.registry.rules.compatibility.AvroCompatibilityChecker`. Discovered via `unzip -l` on the jar; verified against Maven Central search.
 - **Spec mismatch on test expectation:** spec said "removing a required field → INCOMPATIBLE_BOTH" but Apicurio's actual behavior is INCOMPATIBLE_FORWARD only (Avro is lenient about extra fields on read, strict about missing fields). Updated test expectation + Javadoc to reflect reality; spec note preserved in Completion Notes.
-- **Spec mismatch on inheritance:** spec said "no version in util/pom.xml `<plugins>` — inherits from root `<pluginManagement>`" but `util/pom.xml` has no `<parent>` (Story 0.1 / R-01 Option A), so root pluginManagement is NOT inherited. Pinned spotless (3.8.0) and archunit (1.4.1) versions explicitly in util/pom.xml. Same pin policy.
+- **QA-pass bug discovery (avro-compat workflow step):** original step `mvn -pl util test -Dtest=AvroCompatCheckCli -q` references a non-existent JUnit class — `AvroCompatCheckCli` is the production CLI's `main()`, not a test class. Surefire 3.5.4 (util's pinned version) fails with `No tests matching pattern "AvroCompatCheckCli"` on first invocation, breaking the gate. Refactored CLI for testability (added `run(args, out, err) -> int` seam), added 6-case `AvroCompatCheckCliTest`, updated workflow to `-Dtest=AvroCompatCheckCliTest`. Verified the original filter still fails (proving the bug); the fixed filter passes 6/6.
 - **`mvn spotless:apply` reformatted 124 existing util/ files:** these are the source-level drifts from the legacy codebase (tabs vs spaces, unused imports, trailing whitespace). Reformatting is the documented first-run cost per Subtask 7.3; all 124 files committed as part of this story because they're the consequence of adding Spotless enforcement.
 
 ### Completion Notes List
 
 - **Decision recorded (Subtask 1.1):** Option A — `.github/workflows/ci.yml` at repository root, with `.github/workflows/README.md` documenting the rationale and `platform/ci-cd/README.md` noting the same. Architecture line 822's `platform/ci-cd/.github/workflows/ci.yml` is the conceptual path; GH Actions semantics require the root path.
 - **CI JDK:** workflow runs JDK 25 (matches `<release>25</release>` in util/pom.xml). Local dev JDK 26 is fine for `mvn -pl util -am test`.
-- **Test count: 26/26 green** (21 baseline + 3 AvroCompat + 1 ArchUnit ModulithBoundary + 1 ArchUnit ForbiddenDependencies).
+- **Test count: 32/32 green** (21 baseline + 3 AvroCompat + 1 ArchUnit ModulithBoundary + 1 ArchUnit ForbiddenDependencies + **6 new AvroCompatCheckCli**). The CLI test suite was added during the QA pass (story status `review`) to pin the GitHub Actions Avro-compat step's exit-code contract and discovered a wiring bug (see Completion Note below).
+- **QA-pass bug fix (avro-compat CI step):** the workflow's `avro-compat` step originally invoked `mvn -pl util test -Dtest=AvroCompatCheckCli -q`, but `AvroCompatCheckCli` is the production CLI's `main()`, not a JUnit test class. Surefire 3.5.4 rejects the unmatched filter with `No tests matching pattern "AvroCompatCheckCli"` — the step would have failed on the first PR that touched any `services/**/src/main/avro/**.avsc` file. Fix: (1) refactored `AvroCompatCheckCli` to expose a `run(args, out, err) -> int` testable seam, with `main()` reduced to a 2-line wrapper around `System.exit(run(...))`; (2) added `util/src/test/java/vn/vnpt/util/avro/AvroCompatCheckCliTest.java` (6 cases: COMPATIBLE / INCOMPATIBLE_BACKWARD / INCOMPATIBLE_FORWARD / INCOMPATIBLE_BOTH / wrong-arg-count / missing-file); (3) updated the workflow's `-Dtest=` filter from `AvroCompatCheckCli` → `AvroCompatCheckCliTest`. Verified locally: `mvn -pl util test -Dtest=AvroCompatCheckCliTest` → 6/6 green; the original `-Dtest=AvroCompatCheckCli` filter still fails with the same surefire error, confirming the bug was real.
 - **`mvn -pl util spotless:check` → exit 0** (after `mvn spotless:apply` reformatted 124 legacy files).
 - **`npx prettier --check 'frontend/**/*.{ts,tsx,js,jsx,json,md}'` → exit 0** (empty frontend tree; no matching files).
 - **`mvn validate` → BUILD SUCCESS** (all 17 `<module>` entries resolve).
@@ -291,6 +292,7 @@ claude-sonnet (project-dev) — BMAD bmad-dev-story workflow v1
 - `util/src/test/java/vn/vnpt/util/archunit/ModulithPackageBoundaryTest.java` (new)
 - `util/src/test/java/vn/vnpt/util/archunit/ForbiddenDependencyPatternsTest.java` (new)
 - `util/src/test/java/vn/vnpt/util/avro/AvroCompatCheckTest.java` (new — 3 cases)
+- `util/src/test/java/vn/vnpt/util/avro/AvroCompatCheckCliTest.java` (new — 6 cases; QA-pass gap fix)
 - `frontend/.prettierrc.json` (new)
 - `frontend/.prettierignore` (new)
 - `platform/ci-cd/README.md` (new — docs home)
@@ -301,8 +303,86 @@ claude-sonnet (project-dev) — BMAD bmad-dev-story workflow v1
 
 ## Change Log
 
-- 2026-07-06 → 2026-07-07: Story 0.4 implementation. Single commit `49495e9 feat(ci): scaffold CI gates (Story 0.4)` on branch `fix/r-01-util-parent-pom`. Test count 21/21 → 26/26 (added 5: 3 AvroCompat + 1 ArchUnit Modulith + 1 ArchUnit ForbiddenPatterns). All CI gates wired (mvn test, mvn validate, archunit, spotless, prettier, avro-compat via dorny/paths-filter). Spotless reformatted 124 existing util/ files as documented first-run cost.
+- 2026-07-06 → 2026-07-07: Story 0.4 implementation. Single commit `49495e9 feat(ci): scaffold CI gates (Story 0.4)` on branch `fix/r-01-util-parent-pom`. Test count 21/21 → 26/26 → **32/32** (added 11: 3 AvroCompat + 1 ArchUnit Modulith + 1 ArchUnit ForbiddenPatterns + **6 AvroCompatCheckCli**). All CI gates wired (mvn test, mvn validate, archunit, spotless, prettier, avro-compat via dorny/paths-filter). QA pass found + fixed the `avro-compat` step's broken surefire filter (now points at `AvroCompatCheckCliTest`). Spotless reformatted 124 existing util/ files as documented first-run cost.
+- 2026-07-07: Story-automator review (auto-fix pass, commit `0807257`).
+  - **CRITICAL fixed**: CI archunit step filter `*ArchUnitTest,*ForbiddenDependencyPatternsTest` did not match `ModulithPackageBoundaryTest` (no 'ArchUnit' substring) — only 1 of the 2 expected tests was running. Changed to explicit class names; verified `Tests run: 2, Failures: 0, Errors: 0`.
+  - **HIGH fixed**: story claimed `32/32 green` but `AvroCompatCheckCli.java` modification and `AvroCompatCheckCliTest.java` (new) were uncommitted — committed together with the workflow fix.
+  - **Outcome**: status `review` → `done`. Sprint status synced.
 
 ## Senior Developer Review (AI)
 
-<!-- To be filled by the reviewer after the dev agent submits. -->
+_Reviewer: story-automator on 2026-07-07. Workflow: bmad-story-automator-review v1 (auto-fix mode)._
+
+### Outcome
+
+**Approved (with auto-fixes applied).** Status: `review` → `done`.
+
+### Validation summary
+
+| Item | Result |
+|---|---|
+| Story file loaded | ✓ `_bmad-output/implementation-artifacts/0-4-...md` |
+| Status was reviewable | ✓ was `review` |
+| ACs cross-checked (1–9) | ✓ All 9 implemented |
+| Tasks audit ([x] vs [ ]) | ✓ All 8 tasks + all subtasks marked complete and verified |
+| File List vs git reality | ⚠ 1 discrepancy (AvroCompatCheckCliTest untracked) — fixed |
+| Tests mapped to ACs | ✓ AC #6 → 9 AvroCompat/Cli tests; AC #5 → 2 ArchUnit tests; AC #7 → 32/32 baseline preserved |
+| Code quality | ✓ Clean; minor doc improvements only |
+| Security review | ✓ OIDC NOT required per AC #9; permissions `contents: read` only; pinned versions exact |
+| Sprint status synced | ✓ `0-4-...`: review → done |
+| Story saved | ✓ |
+
+### Findings + auto-fixes
+
+#### 🔴 CRITICAL
+
+**[CR-1] CI filter silently skips Modulith rule (workflow step #3)**
+- File: `.github/workflows/ci.yml:60`
+- Original: `mvn -pl util -am test -Dtest='*ArchUnitTest,*ForbiddenDependencyPatternsTest'`
+- Defect: `*ArchUnitTest` matches NO classes (`ModulithPackageBoundaryTest` has no `ArchUnit` substring) — only `ForbiddenDependencyPatternsTest` was actually running. AC #5's Modulith rule was effectively a no-op in CI.
+- Verification: surefire ran `Tests run: 1` for the Modulith class was not in scope.
+- Fix: replaced with explicit class names `ModulithPackageBoundaryTest,ForbiddenDependencyPatternsTest`. Verified `Tests run: 2, Failures: 0, Errors: 0`.
+
+#### 🟡 HIGH (filed → fixed via commit)
+
+**[HI-1] Story claimed 32/32 green with uncommitted QA-pass work**
+- Files: `util/src/main/java/vn/vnpt/util/avro/AvroCompatCheckCli.java` (modified) + `util/src/test/java/vn/vnpt/util/avro/AvroCompatCheckCliTest.java` (untracked).
+- Defect: story status was `review` with `git status` showing 1 staged + 1 untracked QA-pass artifact. Tests run locally as 32/32 (working tree included the files), but the actual branch did not contain them — review could not pass while truth-of-record drifted from local truth.
+- Fix: committed `AvroCompatCheckCli` refactor + new `AvroCompatCheckCliTest` (6 cases) along with the workflow fix in commit `0807257`.
+
+#### 🟢 LOW (documented; not auto-fixed)
+
+**[LO-1] `avro-compat` step runs JUnit tests, not schema diffs**
+- File: `.github/workflows/ci.yml:86-87`
+- Observation: when `avro-changed == 'true'` (a `services/**/src/main/avro/**.avsc` file was modified), the step runs `mvn -pl util test -Dtest=AvroCompatCheckCliTest -q` — the JUnit class with hard-coded inline schemas. The actual modified `.avsc` files are not fed into `AvroCompatCheckCli.run(prev, proposed)`.
+- Status: documented Sprint 0 limitation per Dev Notes ("Sprint 0 ships the producer + 3-case unit test + the CI step (skipped); Story 1.3 wires real schemas"). The step will be re-engineered in Story 1.3 (catalog change events with Avro strict compat). Not in scope to fix here.
+
+**[LO-2] GH Actions pinned to major version, not SHA**
+- Files: `actions/checkout@v4`, `actions/setup-java@v4`, `actions/setup-node@v4`, `dorny/paths-filter@v2`.
+- Observation: best practice for security-sensitive workflows is SHA-pinning. Story 0.4 did not require it; AC #9 only asserts minimum scope + cache. Leave as-is; revisit if addendum issues a hardening epic.
+
+### Architectural alignment
+
+- AC #1 (GH Actions workflow at `.github/workflows/ci.yml`) — ✓ implemented (with documented `platform/ci-cd/` home for docs)
+- AC #2–3 (step order: unit tests → validate → archunit → spotless → prettier → avro-compat) — ✓ (matches Subtask 6.1)
+- AC #4 (Spotless + Prettier fail build on bad formatting) — ✓
+- AC #5 (ArchUnit package-boundary tests, no cross-`infrastructure/` imports) — ✓ after CR-1 fix
+- AC #6 (Avro compat: backward + forward, breaks on incompatible) — ✓ 9 unit tests cover the logic
+- AC #7 (regression: `mvn -pl util -am test` ≥ 21/21 — verified 32/32) — ✓
+- AC #8 (triggers: `pull_request` + `push` to main) — ✓
+- AC #9 (minimum-scope permissions: `contents: read`; OIDC not required) — ✓
+
+### Architecture guardrails preserved
+
+- All plugin / dep versions pinned exactly (no `2.x`/`1.x` floating) — ✓
+- BOM single source of truth in `util/pom.xml` `<dependencyManagement>` — ✓ (untouched)
+- Java 25 LTS — ✓ (`<release>25</release>` in util/pom.xml; CI JDK 25)
+- Root pom holds only `<pluginManagement>` and `<dependencyManagement>` entries — ✓
+- No `services/<name>/` or `bff/<surface>-bff/src/**` touched — ✓ (Sprint 0 placeholders preserved)
+- `SnowflakeIdGenerator.java` (Story 0.5) untouched — ✓
+- `dev/docker-compose.yml` (Story 0.3) untouched — ✓
+- 124 existing util/ files reformatted by Spotless first-run (documented) — ✓
+
+### Notes for the next story
+
+- Story 1.3 (`1-3-catalog-change-events-with-avro-strict-compat-fr-5`) MUST replace the `avro-compat` step's `mvn ... -Dtest=AvroCompatCheckCliTest -q` invocation with an actual schema-diff invocation: `git show HEAD~1:<path>` for `previous` + `cat <path>` for `proposed`, then `java -cp util/target/test-classes:... vn.vnpt.util.avro.AvroCompatCheckCli` against each modified file. The current step is structurally a no-op for real schema drift.
