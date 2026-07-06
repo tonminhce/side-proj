@@ -3,7 +3,6 @@ package vn.vnpt.admin.web;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.Page;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,11 +39,11 @@ public class AdminCatalogController {
       @RequestParam(defaultValue = "20") int size) {
     roleEnforcer.requireStaffOrAdmin();
 
-    // ponytail: forward tenant from the (placeholder) auth principal; Story 5.5 reads JWT claim.
-    String tenant = SecurityContextHolder.getContext().getAuthentication().getName();
-    if (tenant == null || tenant.isBlank()) {
-      tenant = "default";
-    }
+    // ponytail: v1 is single-tenant (architecture-detail.md line 78). The auth principal name in
+    // dev/test is "dev-user" (set by DevRolesHeaderFilter) — that's the SUBJECT, not the tenant.
+    // Story 5.5 derives the tenant from JWT claims. Until then, hardcode "default" — the
+    // placeholder security has no tenant information to forward.
+    String tenant = "default";
 
     // ponytail: BFF blocks; Sprint 1 is not the place for reactive-down-the-stack.
     return catalogClient

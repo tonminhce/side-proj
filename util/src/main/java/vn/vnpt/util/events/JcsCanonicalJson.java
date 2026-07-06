@@ -9,10 +9,9 @@ import java.util.TreeMap;
 /**
  * JCS (RFC 8785) canonical JSON serializer for event envelopes.
  *
- * <p>Why hand-rolled: the RFC 8785 reference impl is ~100KB of transitive deps (jcs Maven
- * artifact) and Jackson's canonical output is NOT byte-deterministic across versions. The
- * behavior we need — sort keys lex, encode numbers/booleans/nulls in JSON form, no whitespace
- * — is ~80 lines of Java.
+ * <p>Why hand-rolled: the RFC 8785 reference impl is ~100KB of transitive deps (jcs Maven artifact)
+ * and Jackson's canonical output is NOT byte-deterministic across versions. The behavior we need —
+ * sort keys lex, encode numbers/booleans/nulls in JSON form, no whitespace — is ~80 lines of Java.
  *
  * <p>Determinism invariants:
  *
@@ -27,8 +26,8 @@ import java.util.TreeMap;
  *
  * <p>Unsupported types: BigInteger/BigDecimal serialize via {@code toString()}; this is
  * non-canonical per RFC 8785 §3.2.2 (which requires fixed-precision serialization). Story 1.3
- * callers do not use those types, so the gap is acceptable; a future hardening story can
- * extend the number branch.
+ * callers do not use those types, so the gap is acceptable; a future hardening story can extend the
+ * number branch.
  */
 public final class JcsCanonicalJson {
 

@@ -34,7 +34,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-app}
     ports: ["5432:5432"]
     networks: [platform-net]
-    volumes: [pg-data:/var/lib/postgresql/data]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Story 1.1: per-service DB init. postgres:16-alpine auto-executes everything in
+      # /docker-entrypoint-initdb.d/*.sql sorted by filename on FIRST start (when pg-data
+      # is empty). On subsequent starts the script is skipped — see dev/README.md.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       <<: *health-defaults

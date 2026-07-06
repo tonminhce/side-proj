@@ -1,5 +1,6 @@
 package vn.vnpt.admin.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -94,6 +95,15 @@ class AdminCatalogControllerBffTest {
     mvc.perform(get("/bff/admin/catalog/products"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content[0].sku").value("red-shirt"));
+
+    // Regression: verify the BFF forwards the X-Tenant header. v1 is single-tenant per
+    // architecture-detail.md line 78, so X-Tenant must be "default" — NOT the dev principal
+    // name "dev-user" (the auth principal name is the SUBJECT, not the tenant).
+    org.mockito.ArgumentCaptor<String> tenantCaptor =
+        org.mockito.ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(headersSpec)
+        .header(org.mockito.ArgumentMatchers.eq("X-Tenant"), tenantCaptor.capture());
+    assertThat(tenantCaptor.getValue()).isEqualTo("default");
   }
 
   @Test

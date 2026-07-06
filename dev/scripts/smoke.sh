@@ -39,12 +39,20 @@ else
   report 1 "postgres: SELECT 1 (${POSTGRES_DB:-app})"
 fi
 
-# 1b. Postgres per-service DBs (Story 1.1: catalog_db). One Postgres pass per existing service DB —
-#     each per-service check verifies the role can connect and run a trivial query.
+# 1b. Postgres per-service DBs (Story 1.1: catalog_db; Story 1.5: inventory_db). One Postgres
+#     pass per existing service DB — each per-service check verifies the role can connect and
+#     run a trivial query.
 if dc exec -T postgres psql -U "${POSTGRES_CATALOG_USER:-catalog_user}" -d "${POSTGRES_CATALOG_DB:-catalog_db}" -tAc "SELECT 1" 2>/dev/null | grep -q '^1$'; then
   report 0 "postgres: SELECT 1 (${POSTGRES_CATALOG_DB:-catalog_db})"
 else
   report 1 "postgres: SELECT 1 (${POSTGRES_CATALOG_DB:-catalog_db})"
+fi
+
+# 1c. Story 1.5 — inventory_db check.
+if dc exec -T postgres psql -U "${POSTGRES_INVENTORY_USER:-inventory_user}" -d "${POSTGRES_INVENTORY_DB:-inventory_db}" -tAc "SELECT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: SELECT 1 (${POSTGRES_INVENTORY_DB:-inventory_db})"
+else
+  report 1 "postgres: SELECT 1 (${POSTGRES_INVENTORY_DB:-inventory_db})"
 fi
 
 # 2. Kafka

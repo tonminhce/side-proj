@@ -4,7 +4,7 @@ baseline_commit: 2071ac6
 
 # Story 1.2: Product aggregate + variant graph (FR-1, FR-2, FR-4)
 
-Status: review
+Status: done
 
 <!-- Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -489,8 +489,8 @@ MiniMax-M3 (claude-code via MiniMax platform)
 
 ### Completion Notes List
 
-- **Test count (recorded EXACT, 2026-07-07):** `mvn -pl services/catalog -am test` → **25 catalog tests** + inherited **42 util tests** = **67 total**. Spec AC #13 said "≥55 total / +6 new"; we ship +18 catalog tests because Boot 4's `@DataJpaTest` removal forced `@SpringBootTest` integration tests (heavier but provide real Hibernate ORM validation against Testcontainers Postgres, not just JPA slices).
-- **Catalog test breakdown:** CatalogApplicationContextTest 5, CatalogPackageBoundaryTest 3 (+1 new), ProductTest 2, VariantTest 5, AttributeTest 1, ProductRepositoryTest 3, VariantRepositoryTest 2, AttributeRepositoryTest 1, CreateProductUseCaseTest 3 (skipped `create_writesToOutboxInSameTransaction` per spec ponytail; implicit in `@Transactional`).
+- **Test count (recorded EXACT, 2026-07-07, post-review):** `mvn -pl services/catalog -am test` → **32 catalog tests** + inherited **42 util tests** = **74 total**. Spec AC #13 said "≥55 total / +6 new"; we ship +25 catalog tests because Boot 4's `@DataJpaTest` removal forced `@SpringBootTest` integration tests, plus extra invariant pinning (JSONB round-trip, currency default, Snowflake event_id, hash suffix length, hash precomputed constant). Story's earlier "25 catalog / 67 total" was a documentation drift — corrected in the Senior Developer Review (AI) section below.
+- **Catalog test breakdown (verified against surefire output):** CatalogApplicationContextTest 7, CatalogPackageBoundaryTest 3 (+1 new), ProductTest 2, VariantTest 7 (+2: `sku_producesExpectedHashForKnownInput`, `sku_hashSuffixIsSixteenLowercaseHexChars`), AttributeTest 1, ProductRepositoryTest 3, VariantRepositoryTest 3 (+1: `jsonbAttributes_roundTripPreservesAllKeys` — directly pins AC #4), AttributeRepositoryTest 1, CreateProductUseCaseTest 5 (+2: `create_defaultsCurrencyToVNDWhenNull`, `create_writesOutboxEventIdAsSnowflakeLong` — skipped `create_writesToOutboxInSameTransaction` per spec ponytail; implicit in `@Transactional`).
 - **mvn validate:** 17 `<module>` entries preserved (AC #14).
 - **ArchUnit regression guard:** CatalogPackageBoundaryTest passes 3/3 (Story 1.1's 2 sibling-service rules + new domain-doesn't-depend-on-infrastructure rule from AC #16).
 - **CI gate flipped:** `.github/workflows/ci.yml` step `Test catalog module (Story 1.1 — non-blocking)` → `Test catalog module (Story 1.2 — gate flipped to blocking)` with `continue-on-error: true` removed. Comment block updated to "2026-07-07" date.
@@ -541,4 +541,71 @@ MiniMax-M3 (claude-code via MiniMax platform)
 
 ### Change Log
 
-- 2026-07-07 — Story 1.2 implementation complete. 3 entities + outbox port/writer + CreateProductUseCase + repositories + V002 migration + 8 tests + CI gate flip. 25 catalog tests / 42 util tests / 67 total. Status changed: ready-for-dev → review.
+- 2026-07-07 — Story 1.2 implementation complete. 3 entities + outbox port/writer + CreateProductUseCase + repositories + V002 migration + 8 tests + CI gate flip. 32 catalog tests / 42 util tests / 74 total. Status changed: ready-for-dev → review.
+- 2026-07-07 — Senior Developer Review (AI) completed. 1 HIGH finding fixed (test-count documentation drift). Story status → done; sprint-status.yaml synced.
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Tonminh (via story-automator) on 2026-07-07
+**Outcome:** ✅ **Approve** (after fixing 1 HIGH documentation drift)
+
+### Verification matrix
+
+| AC | Description | Status |
+|----|-------------|--------|
+| 3 | Variant.computeSku = sha256(key=value\|…)[:16] prefixed by productSlug | ✅ IMPLEMENTED + pinned in 7 VariantTest methods including precomputed `red-shirt-3e59e30d7769a8a7` |
+| 4 | JSONB attributes via `@JdbcTypeCode(SqlTypes.JSON)`, no third-party JSON lib | ✅ IMPLEMENTED + pinned by `VariantRepositoryTest.jsonbAttributes_roundTripPreservesAllKeys` |
+| 5 | All entities extend BaseEntity, no field redeclaration, `@EqualsAndHashCode(callSuper = true)` | ✅ IMPLEMENTED — verified across Product/Variant/Attribute |
+| 6 | Product fields (name, sku, description, brand), no priceCents/currency | ✅ IMPLEMENTED |
+| 7 | Variant fields (productUuid as Long, sku, attributes JSONB, priceCents, currency) | ✅ IMPLEMENTED |
+| 8 | Attribute fields (productUuid, name, displayName, sortOrder), no `@UniqueConstraint` | ✅ IMPLEMENTED |
+| 9 | V002 adds `tenant_id` to products/variants/attributes only (NOT outbox/processed_event) | ✅ IMPLEMENTED — verified in V002 file |
+| 10 | Repositories: ProductRepository, VariantRepository, AttributeRepository (derived queries only) | ✅ IMPLEMENTED |
+| 11 | CreateProductUseCase `@Transactional` + outbox.append in same tx; OutboxPublisher port; JdbcOutboxWriter @Primary | ✅ IMPLEMENTED |
+| 12 | Domain has zero `jakarta.persistence` outside entity annotations | ✅ IMPLEMENTED — domain entities use only `@Entity/@Table/@Column/@Id/@JdbcTypeCode/@AttributeOverride` |
+| 13 | `mvn -pl services/catalog -am test` green | ✅ GREEN — 32 catalog tests pass |
+| 14 | `mvn validate` shows 17 `<module>` entries | ✅ GREEN — 17 modules confirmed |
+| 15 | `mvn -pl util -am test` remains 42/42 | ✅ GREEN — 42/42 unchanged |
+| 16 | CatalogPackageBoundaryTest passes with new `domain_doesNotDependOnInfrastructure` rule | ✅ GREEN — 3/3 methods pass |
+| 17 | CI gate flipped from non-blocking to blocking | ✅ CONFIRMED in `.github/workflows/ci.yml` |
+
+### Git vs Story File List discrepancies
+
+- **Story lists 12 new files + 3 modified files (pom.xml, CI yml, CatalogPackageBoundaryTest).** Git diff shows all of them present in commit `8d4c583`. ✅ No discrepancies.
+
+### Findings
+
+#### 🔴 HIGH (1) — FIXED
+
+**Test-count documentation drift (recurring Stories 0.4 / 0.5 / 1.1 pattern).** Story Completion Notes claimed **25 catalog tests / 67 total**. Actual surefire output shows **32 catalog tests / 74 total**. The drift was in three places:
+- `CatalogApplicationContextTest` actually runs **7** tests (Story 1.1's QA-pass additions brought it from 5 to 7, not re-counted).
+- `VariantTest` runs **7** tests (added `sku_producesExpectedHashForKnownInput` + `sku_hashSuffixIsSixteenLowercaseHexChars`).
+- `VariantRepositoryTest` runs **3** tests (added `jsonbAttributes_roundTripPreservesAllKeys` — directly pins AC #4).
+- `CreateProductUseCaseTest` runs **5** tests (added `create_defaultsCurrencyToVNDWhenNull` + `create_writesOutboxEventIdAsSnowflakeLong`).
+
+**Fix applied:** Updated "Completion Notes List" with the verified breakdown (32 catalog / 42 util / 74 total) and explicit per-class counts. All claims cross-checked against `mvn -pl services/catalog test` surefire output.
+
+#### 🟢 LOW (1) — DOCUMENTED, NOT FIXED
+
+**AC #3 illustrative example uses outdated canonical form.** AC text states `sku(slug=red,M) = <product.slug>-<sha256("red|M").substring(0,16)>` with example `red-shirt-3f2a91c0e8b74d11`, but the canonical form per AC text just below is `key=value` (i.e. `color=red|size=M`). The illustrative example's `red|M` (value-only) form is inconsistent with the actual implementation (`color=red|size=M`). The test correctly pins the real expected hash (`red-shirt-3e59e30d7769a8a7`). **No code change needed** — implementation matches the AC's stated canonical form; only the inline example was misleading. Worth correcting in a future story spec revision.
+
+### Deviations verified
+
+All 5 deviations from spec (Completion Notes) match the actual implementation:
+- ✅ V002 expanded beyond spec to back-fill V001's missing audit columns — verified in V002 file header + ALTER statements
+- ✅ Lombok added to `services/catalog/pom.xml` as `<scope>provided</scope>` with `annotationProcessorPaths` — verified in pom.xml
+- ✅ `@DataJpaTest` → `@SpringBootTest` on 3 repository tests — verified (grep returned only a doc comment)
+- ✅ Jackson 3 (`tools.jackson.*`) — verified (grep returned zero `com.fasterxml.jackson` usage in catalog sources)
+- ✅ `create_writesToOutboxInSameTransaction` skipped per spec ponytail — verified (test class JavaDoc documents the skip)
+
+### Auto-fix applied
+
+1. **HIGH (test-count drift):** Updated "Completion Notes List" with verified per-class breakdown and total counts (32 catalog / 42 util / 74 total). Cross-checked against `mvn -pl services/catalog test` surefire output.
+
+### Status decision
+
+- 0 CRITICAL issues remain after fixes.
+- 1 HIGH (documentation drift) fixed.
+- 1 LOW (illustrative example inconsistency) documented, no code change.
+
+**New status:** `done`. Sprint status synced.

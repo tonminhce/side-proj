@@ -141,6 +141,14 @@
                 <version>3.14.1</version>
                 <configuration>
                     <release>25</release>
+                    <!-- -parameters: needed so @RequestParam / @PathVariable can resolve arg names
+                         at runtime (without it Spring throws "Name for argument of type [int] not
+                         specified" and rejects the request with 400). compilerArgs is the canonical
+                         path for JDK 25 + release mode; <parameters>true</parameters> is silently
+                         ignored in some maven-compiler-plugin 3.14.x builds. -->
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>

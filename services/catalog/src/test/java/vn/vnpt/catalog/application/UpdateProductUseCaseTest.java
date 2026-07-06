@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
-import java.util.Map;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +15,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import vn.vnpt.catalog.CatalogApplication;
 import vn.vnpt.catalog.domain.Product;
 import vn.vnpt.catalog.domain.exception.ProductNotFoundException;
@@ -50,6 +51,7 @@ class UpdateProductUseCaseTest {
   @Autowired UpdateProductUseCase useCase;
   @Autowired CreateProductUseCase createUseCase;
   @Autowired DataSource dataSource;
+  @Autowired ObjectMapper objectMapper;
 
   @Test
   void update_persistsFieldsAndOutboxEvent() {
@@ -80,6 +82,20 @@ class UpdateProductUseCaseTest {
             Integer.class,
             created.getUuid());
     assertThat(updateCount).isEqualTo(1);
+
+    // AC #10: "the event payload's `name` carries the new value — consumers see the
+    // post-update state." A regression that captures the pre-update name (e.g. reads
+    // `product.getName()` before the setter) would silently ship stale data to consumers.
+    String payload =
+        jdbc.queryForObject(
+            "SELECT payload::text FROM outbox WHERE aggregate_id = ? AND event_type ="
+                + " 'catalog.product.updated'",
+            String.class,
+            created.getUuid());
+    JsonNode node = objectMapper.readTree(payload);
+    assertThat(node.get("name").asText()).isEqualTo("New Name");
+    assertThat(node.get("sku").asText()).isEqualTo("sku-original-1");
+    assertThat(node.get("productUuid").asLong()).isEqualTo(created.getUuid());
   }
 
   @Test

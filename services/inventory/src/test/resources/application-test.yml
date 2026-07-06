@@ -1,0 +1,56 @@
+# services/inventory/src/test/resources/application-test.yml — Story 1.5
+# Test profile. Mirrors application.yml but overrides the HMAC signature so tests can pre-compute
+# a valid one (or tamper it for the failure path).
+
+server:
+  port: 0   # Random port for @SpringBootTest; not used (no controllers in Story 1.5).
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+  datasource:
+    url: ${TC_POSTGRES_URL:jdbc:postgresql://localhost:5432/inventory_db}
+    username: ${TC_POSTGRES_USER:inventory_user}
+    password: ${TC_POSTGRES_PASSWORD:inventory_pass}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/inventory
+    baseline-on-migrate: true
+
+  modulith:
+    events:
+      jdbc:
+        poll-interval: 500ms
+
+  # util's UtilsAutoConfiguration has the same dual-bean registration bug as catalog (see
+  # services/catalog/src/test/resources/application-test.yml for details). We exclude it to
+  # avoid pulling in TenantRoutingDataSource (which fails with "Cannot determine target
+  # DataSource for lookup key [null]" when the test profile doesn't pre-seed a tenant).
+  autoconfigure:
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+catalog:
+  events:
+    # Test secret (mirrors catalog's dev default).
+    hmac-secret: dev-only-secret-do-not-use-in-prod
+    # Default signature for happy-path tests; tests override via @TestPropertySource when they
+    # need a tampered signature for the failure path.
+    signature: dev-only-signature
+
+logging:
+  level:
+    vn.vnpt.inventory: INFO

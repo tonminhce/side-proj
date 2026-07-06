@@ -121,4 +121,25 @@ class CatalogPackageBoundaryTest {
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
                 .importPackages("vn.vnpt.catalog"));
   }
+
+  /**
+   * Story 1.4 / AC #13 — query DTOs (application.query..) MUST NOT leak into the domain. The
+   * read-side projection is an application-layer concern; domain stays aggregate-pure. A
+   * future story that imports {@code ProductSummary} into a domain class would silently blur
+   * the layering and break DDD modeling.
+   */
+  @Test
+  void web_doesNotLeakQueryDtosIntoDomain() {
+    noClasses()
+        .that()
+        .resideInAPackage("vn.vnpt.catalog.domain..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("vn.vnpt.catalog.application.query..")
+        .because("Read-side query DTOs are application-layer; domain must stay aggregate-pure.")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.catalog"));
+  }
 }

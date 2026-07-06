@@ -96,18 +96,43 @@ class ModulithOutboxBridgeTest {
     // base64url, no padding
     assertThat(hmacB64).matches("^[A-Za-z0-9_-]+$");
 
-    // Reconstruct the envelope (metadata only — payload excluded for the JSONB re-serialize
-    // reason documented in ModulithOutboxPublisher) and verify the signature end-to-end.
+    // Reconstruct the envelope (metadata + payload_sha256 digest for ADR-20 payload
+    // integrity — see ModulithOutboxPublisher). The producer parses the payload JSON,
+    // runs it through JCS, and SHA-256s the canonical bytes; we do the same so the hash
+    // matches regardless of the JSONB column's whitespace normalization round-trip.
     String payloadJson = (String) row.get("payload");
+    String payloadSha256 = sha256Hex(canonicalPayload(payloadJson));
     Map<String, Object> envelope = new java.util.LinkedHashMap<>();
     envelope.put("event_id", eventId);
     envelope.put("event_type", "catalog.product.created");
     envelope.put("aggregate_type", "Product");
     envelope.put("aggregate_id", product.getUuid());
+    envelope.put("payload_sha256", payloadSha256);
     String canonical = JcsCanonicalJson.serialize(envelope);
     assertThat(
             HmacEventSigner.verify(canonical, hmacB64, "dev-only-secret-do-not-use-in-prod"))
         .isTrue();
+  }
+
+  @SuppressWarnings("unchecked")
+  private String canonicalPayload(String payloadJson) {
+    try {
+      Map<String, Object> parsed = objectMapper.readValue(payloadJson, Map.class);
+      return JcsCanonicalJson.serialize(parsed);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static String sha256Hex(String input) {
+    try {
+      return java.util.HexFormat.of()
+          .formatHex(
+              java.security.MessageDigest.getInstance("SHA-256")
+                  .digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private JsonNode parseJson(String s) {
@@ -148,5 +173,33 @@ class ModulithOutboxBridgeTest {
                       product.getUuid());
               assertThat(count).isEqualTo(1);
             });
+  }
+
+  /**
+   * ADR-04 idempotency key — the outbox row's {@code event_id} is the cross-service dedup key.
+   * A regression that swaps {@link vn.vnpt.util.common.SnowflakeIdGenerator} for a UUID-string
+   * or a 0-based sequence would silently break consumers (their {@code INSERT … ON CONFLICT}
+   * on a non-numeric or zero {@code event_id} would misfire). Pin: positive {@code Long}.
+   */
+  @Test
+  void createProduct_outboxEventIdIsPositiveSnowflake() {
+    var product =
+        useCase.create(
+            new CreateProductCommand(
+                "Snowflake Test",
+                "snowflake-sku-1",
+                null,
+                null,
+                List.of(),
+                List.of()));
+
+    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+    Long eventId =
+        jdbc.queryForObject(
+            "SELECT event_id FROM outbox WHERE aggregate_id = ? AND event_type ="
+                + " 'catalog.product.created'",
+            Long.class,
+            product.getUuid());
+    assertThat(eventId).as("ADR-04 idempotency key outbox.event_id").isNotNull().isPositive();
   }
 }

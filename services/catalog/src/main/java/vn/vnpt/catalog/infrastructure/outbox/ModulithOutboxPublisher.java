@@ -1,7 +1,11 @@
 package vn.vnpt.catalog.infrastructure.outbox;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +117,12 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
     envelope.put("event_type", eventType);
     envelope.put("aggregate_type", aggregateType);
     envelope.put("aggregate_id", aggregateId);
+    // ADR-20: bind the HMAC to the payload bytes via a SHA-256 of the JCS-canonical
+    // payload (parse-then-canonicalize so Postgres JSONB-roundtripped bytes on the
+    // consumer side produce identical logical content → identical hash). Without this,
+    // an attacker rewriting the outbox row's payload (or any wire-side event-injection
+    // vector) could mutate content while keeping the HMAC valid.
+    envelope.put("payload_sha256", sha256Hex(canonicalPayload(payloadJson)));
     String canonical = JcsCanonicalJson.serialize(envelope);
     String hmacB64 = HmacEventSigner.sign(canonical, hmacSecret);
 
@@ -168,6 +178,31 @@ public class ModulithOutboxPublisher implements OutboxPublisher {
       out.put(field.name(), record.get(field.pos()));
     }
     return out;
+  }
+
+  private static String sha256Hex(String input) {
+    try {
+      return HexFormat.of()
+          .formatHex(MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8)));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 is mandated by the JRE", e);
+    }
+  }
+
+  /**
+   * Deterministic payload-binding digest: parse the JSON, run it through {@link
+   * JcsCanonicalJson} (RFC 8785), return the canonical bytes. Both producer and consumer
+   * apply the same parse → canonicalize → hash chain, so the digest is independent of
+   * Postgres JSONB column re-serialization or Jackson whitespace quirks.
+   */
+  @SuppressWarnings("unchecked")
+  private String canonicalPayload(String payloadJson) {
+    try {
+      Map<String, Object> parsed = objectMapper.readValue(payloadJson, Map.class);
+      return JcsCanonicalJson.serialize(parsed);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to canonicalize payload for HMAC envelope", e);
+    }
   }
 
   /**

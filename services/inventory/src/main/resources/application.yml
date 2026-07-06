@@ -1,0 +1,91 @@
+# services/inventory/src/main/resources/application.yml — Story 1.5
+# Per-service datasource. Defaults match dev/.env.example; prod secrets come from Vault
+# (architecture.md line 413 / ADR-21). No real secrets in this file.
+
+server:
+  port: 8083   # InventoryService: 8083. catalog is 8081, admin-bff is 8082.
+
+spring:
+  application:
+    name: inventory
+
+  main:
+    # Spring Boot 4 disabled bean override by default. util's library beans (e.g. RedisConfig's
+    # @Primary redisTemplate) intentionally override Spring Boot autoconfig beans; allow it.
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    # Story 1.5 (ponytail fallback): we write the outbox table directly to keep the
+    # architecture.md line 297 column shape. The Modulith bridge's JDBC
+    # EventPublicationRepository expects its own column names (ID, EVENT_TYPE, LISTENER_ID,
+    # SERIALIZED_EVENT, STATUS, COMPLETION_ATTEMPTS, ...) and writes to EVENT_PUBLICATION,
+    # not our `outbox` table. Excluding the bridge's JdbcEventPublicationAutoConfiguration
+    # leaves the in-process @ApplicationModuleListener path intact (provided by
+    # spring-modulith-events-core's EventPublicationAutoConfiguration) but disables the
+    # bridge's JDBC persistence leg. ModulithOutboxPublisher provides a no-op
+    # EventPublicationRepository bean so the in-process event registry wires correctly.
+    # The CatalogEventListener still fires via the ApplicationEventPublisher in
+    # ModulithOutboxPublisher. A future hardening story may re-enable the bridge by
+    # removing this exclude and aligning the schema.
+    exclude:
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_INVENTORY_DB:inventory_db}
+    username: ${POSTGRES_INVENTORY_USER:inventory_user}
+    password: ${POSTGRES_INVENTORY_PASSWORD:inventory_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns schema; JPA validates entity <-> table mapping.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # architecture.md anti-pattern guard: never auto-open a transaction in the view layer.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    # Inventory migrations live under db/migration/inventory/ (sub-folder) to avoid classpath
+    # collisions with the catalog jar's V001__create_catalog_tables.sql when inventory depends
+    # on catalog (for the CatalogProductCreated Avro event).
+    locations: classpath:db/migration/inventory
+    # Story 1.5 is the FIRST migration; baseline-on-migrate keeps Flyway from refusing an empty schema.
+    baseline-on-migrate: true
+    table: flyway_schema_history   # default; explicit for readability
+
+  # Spring Modulith outbox bridge — Story 1.5 (ADR-01 / ADR-14 / ADR-20).
+  # Property names verified against spring-modulith-events-jdbc:2.0.7.
+  modulith:
+    events:
+      jdbc:
+        # 500ms poll per architecture-detail.md line 146 (ADR-14 operational).
+        poll-interval: 500ms
+      outbox:
+        # Page on-call above 10k backlog rows (architecture-detail.md line 153).
+        publish-backpressure-threshold: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # minimal for AC #22; Story 10.1 expands to LGTM dashboard surface
+  endpoint:
+    health:
+      show-details: always    # AC #22: `db` component must report PostgreSQL details
+
+catalog:
+  events:
+    # Used by CatalogEventListener to verify HMAC signature on inbound catalog events
+    # (ADR-20 / AC #14). Production overrides via Vault at secret/events/hmac/catalog
+    # (ADR-18; deferred hardening). MUST match the producer's signing secret in
+    # services/catalog/src/main/resources/application.yml `catalog.events.hmac-secret`.
+    hmac-secret: ${catalog.events.hmac-secret:dev-only-secret-do-not-use-in-prod}
+
+logging:
+  level:
+    vn.vnpt.inventory: INFO
+    # Modulith logs the package-boundary map at startup; useful for AC #23 verify.
+    org.springframework.modulith: INFO

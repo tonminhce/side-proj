@@ -70,6 +70,39 @@ class JcsCanonicalJsonTest {
   }
 
   @Test
+  void serializesNumberAsJsonNumber() {
+    // RFC 8785 §3.2.2 — numbers as JSON numbers, NOT quoted strings. The envelope carries
+    // Long values (Snowflake IDs) — a regression that wraps them as `"123"` would break
+    // HMAC recomputation on the consumer side (different bytes → different signature).
+    String out = JcsCanonicalJson.serialize(Map.of("event_id", 1234567890123L));
+    assertThat(out).isEqualTo("{\"event_id\":1234567890123}");
+
+    // Doubles keep their toString form (no forced fractional; Integer.toString stays integer).
+    String dbl = JcsCanonicalJson.serialize(Map.of("ratio", 1.5));
+    assertThat(dbl).isEqualTo("{\"ratio\":1.5}");
+  }
+
+  @Test
+  void serializesEmptyMap() {
+    String out = JcsCanonicalJson.serialize(Map.of());
+    assertThat(out).isEqualTo("{}");
+  }
+
+  @Test
+  void serializesEmptyList() {
+    String out = JcsCanonicalJson.serialize(Map.of("xs", List.of()));
+    assertThat(out).isEqualTo("{\"xs\":[]}");
+  }
+
+  @Test
+  void serializesStringWithTabEscape() {
+    // \t is a JSON-mandated escape — RFC 8785 §3.2.3 short-form table. A regression that
+    // drops the explicit case would fall through to the \\uXXXX path; pin the short form.
+    String out = JcsCanonicalJson.serialize(Map.of("x", "a\tb"));
+    assertThat(out).isEqualTo("{\"x\":\"a\\tb\"}");
+  }
+
+  @Test
   void rejectsUnsupportedValueType() {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("weird", new Object());

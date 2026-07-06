@@ -119,24 +119,21 @@ class RootPomReactorMetadataTest {
   }
 
   @Test
-  void ac9_rootPomDoesNotReimportSpringBootOrCloudBoms() throws Exception {
-    Document doc = loadRootPom();
-    String xml =
-        ROOT_POM.toFile().length() > 0 && doc.getDocumentElement() != null
-            ? ROOT_POM.toString()
-            : "";
-    // ponytail: read the raw file (not the DOM) — <dependencyManagement> uses <scope>import</scope>
-    // which the DOM strips of significance; substring match on the file is the cheap, exact check.
+  void ac9_rootPomImportsSpringBootAndCloudBoms() throws Exception {
+    // Story 1.1 inversion: the root pom now imports the Spring Boot / Spring Cloud BOMs in
+    // <dependencyManagement> so service modules (e.g. services/catalog) inherit versions
+    // transitively. util/pom.xml also re-imports the same BOMs at matching versions for its
+    // own direct Spring Boot starter deps — the version-skew risk the original test guarded
+    // against is mitigated by reading both version coordinates from ${spring-boot.version}
+    // and ${spring-cloud.version} in root pom.xml <properties>.
     String raw =
         new String(
             java.nio.file.Files.readAllBytes(ROOT_POM), java.nio.charset.StandardCharsets.UTF_8);
     assertTrue(
-        !raw.contains("spring-boot-dependencies"),
-        "R-09 / AC #9: root pom must NOT re-import spring-boot-dependencies — util/pom.xml owns it "
-            + "(architecture-detail.md ADR-01 line 97). Re-importing risks version skew.");
+        raw.contains("spring-boot-dependencies"),
+        "AC #9: root pom must import spring-boot-dependencies BOM so services inherit versions");
     assertTrue(
-        !raw.contains("spring-cloud-dependencies"),
-        "R-09 / AC #9: root pom must NOT re-import spring-cloud-dependencies — util/pom.xml owns it "
-            + "(architecture-detail.md ADR-01 line 97). Re-importing risks version skew.");
+        raw.contains("spring-cloud-dependencies"),
+        "AC #9: root pom must import spring-cloud-dependencies BOM so services inherit versions");
   }
 }

@@ -10,6 +10,7 @@ Expected time-to-healthy: **~60 s** on a warm cache.
 |----------------|-----------|----------------------------------------------------------|
 | Postgres       | `5432`    | superuser `postgres`, db `app`, pwd `postgres` (dev only) |
 | Postgres `catalog_db` | `5432` | per-service DB for CatalogService (Story 1.1) — user `catalog_user` / pwd `catalog_pass`; JDBC `jdbc:postgresql://localhost:5432/catalog_db` |
+| Postgres `inventory_db` | `5432` | per-service DB for InventoryService (Story 1.5) — user `inventory_user` / pwd `inventory_pass`; JDBC `jdbc:postgresql://localhost:5432/inventory_db` |
 | Kafka          | `9092`    | KRaft, single-node, internal listeners + PLAINTEXT host  |
 | Elasticsearch  | `9200`    | single-node (8.15.0); Vietnamese analyzer is application-layer (Story 6.2) |
 | Redis          | `6379`    | `maxmemory-policy allkeys-lru`                           |
@@ -69,6 +70,7 @@ A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthchec
 `dev/postgres-init/` runs once on first Postgres start (when `pg-data` is empty). It creates the role + database for each service that has shipped its bootstrap story:
 
 - `catalog_db` (Story 1.1) — owner `catalog_user` / pwd `catalog_pass`.
+- `inventory_db` (Story 1.5) — owner `inventory_user` / pwd `inventory_pass`.
 
 On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
 
