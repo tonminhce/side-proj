@@ -9,12 +9,12 @@ import org.apache.poi.ss.usermodel.Row;
 @AllArgsConstructor
 @Data
 public class ExcelData {
-    Object beforeData;
-    Object currentData;
-    Object afterData;
-    Row row;
-    Class<?> type;
-    Integer startMergeIndex;
-    Integer endMergeIndex;
-    Integer currentIndex;
+  Object beforeData;
+  Object currentData;
+  Object afterData;
+  Row row;
+  Class<?> type;
+  Integer startMergeIndex;
+  Integer endMergeIndex;
+  Integer currentIndex;
 }

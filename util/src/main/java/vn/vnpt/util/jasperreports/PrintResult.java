@@ -10,7 +10,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PrintResult {
-    private String fileName;
-    private byte[] data;
-    private ReportType type;
+  private String fileName;
+  private byte[] data;
+  private ReportType type;
 }

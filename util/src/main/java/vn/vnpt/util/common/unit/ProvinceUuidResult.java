@@ -6,6 +6,6 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public class ProvinceUuidResult {
-    private final Long currentUuid;
-    private final Long oldUuid;
+  private final Long currentUuid;
+  private final Long oldUuid;
 }

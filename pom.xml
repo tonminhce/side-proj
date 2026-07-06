@@ -58,8 +58,38 @@
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>4.0.0</version>
                 </plugin>
+                <!--
+                  Spotless — pinned exactly per Story 0.4 / addendum A4 R-09 (Boot 4 ecosystem lag).
+                  Plugin version policy matches the existing maven-compiler-plugin:3.14.1 line.
+                  Story 0.4 nominally specified 2.46.0, but 3.8.0 is the current stable and is
+                  compatible with both JDK 25 (CI) and JDK 26 (local dev). Without this bump
+                  googleJavaFormat fails on JDK 26 with NoSuchMethodError against javac internals.
+                  Configuration lives in util/pom.xml; Epic 1+ services inherit the plugin version
+                  via pluginManagement.
+                -->
+                <plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <version>3.8.0</version>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+              ArchUnit — pinned exactly per Story 0.4 / addendum A4 R-09 (Boot 4 ecosystem lag).
+              Static analyzer with no Spring runtime dependency, so Boot 4 has no impact.
+              Used by util/ archunit tests to enforce Spring Modulith package boundaries.
+            -->
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>1.4.1</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>

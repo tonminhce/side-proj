@@ -9,12 +9,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ExcelImportConfigInfo {
 
-    private int sheetIndex;
+  private int sheetIndex;
 
-    private int startColumnIndex;
+  private int startColumnIndex;
 
-    private int headerRowIndex;
+  private int headerRowIndex;
 
-    private int dataStartRowIndex;
-
+  private int dataStartRowIndex;
 }

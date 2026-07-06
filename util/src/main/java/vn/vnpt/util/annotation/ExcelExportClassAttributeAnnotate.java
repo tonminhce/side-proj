@@ -8,6 +8,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface ExcelExportClassAttributeAnnotate {
-    String Comment() default "";
-    String TitleInFile();
+  String Comment() default "";
+
+  String TitleInFile();
 }

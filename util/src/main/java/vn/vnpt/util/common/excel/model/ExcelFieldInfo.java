@@ -11,16 +11,13 @@ import vn.vnpt.util.common.excel.enumdef.CellTypeEnum;
 @AllArgsConstructor
 public class ExcelFieldInfo {
 
-    private int colIndex;
+  private int colIndex;
 
-    @SpecialSymbolConstraint
-    private String colName;
+  @SpecialSymbolConstraint private String colName;
 
-    @SpecialSymbolConstraint
-    private String colLabel;
+  @SpecialSymbolConstraint private String colLabel;
 
-    private boolean lineField;
+  private boolean lineField;
 
-    private CellTypeEnum type;
-
+  private CellTypeEnum type;
 }

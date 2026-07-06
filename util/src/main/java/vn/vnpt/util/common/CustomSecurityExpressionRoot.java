@@ -8,25 +8,21 @@ import org.springframework.security.access.expression.method.MethodSecurityExpre
 import org.springframework.security.core.Authentication;
 
 @Slf4j
-public class CustomSecurityExpressionRoot extends SecurityExpressionRoot implements MethodSecurityExpressionOperations {
-    @Getter
-    @Setter
-    private Object filterObject;
-    @Getter
-    @Setter
-    private Object returnObject;
-    private Object target;
+public class CustomSecurityExpressionRoot extends SecurityExpressionRoot
+    implements MethodSecurityExpressionOperations {
+  @Getter @Setter private Object filterObject;
+  @Getter @Setter private Object returnObject;
+  private Object target;
 
-    public CustomSecurityExpressionRoot(Authentication authentication) {
-        super(authentication);
-    }
+  public CustomSecurityExpressionRoot(Authentication authentication) {
+    super(authentication);
+  }
 
-    public Object getThis() {
-        return this.target;
-    }
+  public Object getThis() {
+    return this.target;
+  }
 
-    public void setThis(Object target) {
-        this.target = target;
-    }
-
+  public void setThis(Object target) {
+    this.target = target;
+  }
 }

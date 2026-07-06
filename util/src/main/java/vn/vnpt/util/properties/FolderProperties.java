@@ -12,13 +12,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "folder", ignoreUnknownFields = false)
 public class FolderProperties {
-    private Temp temp;
-    private String folderTemp;
-    private String folderTemplate;
+  private Temp temp;
+  private String folderTemp;
+  private String folderTemplate;
 
-    @Getter
-    @Setter
-    public static class Temp {
-        private int timeToLive;
-    }
+  @Getter
+  @Setter
+  public static class Temp {
+    private int timeToLive;
+  }
 }

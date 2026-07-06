@@ -3,9 +3,9 @@ package vn.vnpt.util.component.softdelete.annotation;
 import java.lang.annotation.*;
 
 /**
- * Khai báo một nhóm khóa duy nhất (unique key) trên entity, chỉ tính trên các bản ghi
- * còn sống ({@code is_deleted = false}). Bản ghi đã soft-delete không tính vào kiểm tra trùng,
- * nên giá trị có thể tái sử dụng sau khi bản ghi cũ bị xóa mềm.
+ * Khai báo một nhóm khóa duy nhất (unique key) trên entity, chỉ tính trên các bản ghi còn sống
+ * ({@code is_deleted = false}). Bản ghi đã soft-delete không tính vào kiểm tra trùng, nên giá trị
+ * có thể tái sử dụng sau khi bản ghi cũ bị xóa mềm.
  *
  * <pre>{@code
  * @Entity
@@ -24,15 +24,15 @@ import java.lang.annotation.*;
 @Repeatable(SoftUks.class)
 public @interface SoftUk {
 
-    /** Tên logic của nhóm UK — dùng trong thông báo lỗi. */
-    String name();
+  /** Tên logic của nhóm UK — dùng trong thông báo lỗi. */
+  String name();
 
-    /** Tên các field Java (không phải tên cột) tạo thành khóa duy nhất. */
-    String[] fields();
+  /** Tên các field Java (không phải tên cột) tạo thành khóa duy nhất. */
+  String[] fields();
 
-    /**
-     * Tên cột DB tương ứng (tùy chọn) — phải khớp 1:1 độ dài với {@link #fields()} nếu khai báo.
-     * Nếu để rỗng, tên cột được suy ra từ field theo quy tắc camelCase → snake_case.
-     */
-    String[] columns() default {};
+  /**
+   * Tên cột DB tương ứng (tùy chọn) — phải khớp 1:1 độ dài với {@link #fields()} nếu khai báo. Nếu
+   * để rỗng, tên cột được suy ra từ field theo quy tắc camelCase → snake_case.
+   */
+  String[] columns() default {};
 }

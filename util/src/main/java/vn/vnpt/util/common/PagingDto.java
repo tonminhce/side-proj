@@ -9,10 +9,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public abstract class PagingDto {
-    @NotNull(message = "Số trang không được bỏ trống")
-    protected Integer pageNum = 0;
-    @NotNull(message = "Số dòng không được để trống.")
-    protected Integer pageSize = 10;
-    private String sortField;
-    private String arrangementDirection = "DESC";
+  @NotNull(message = "Số trang không được bỏ trống")
+  protected Integer pageNum = 0;
+
+  @NotNull(message = "Số dòng không được để trống.")
+  protected Integer pageSize = 10;
+
+  private String sortField;
+  private String arrangementDirection = "DESC";
 }

@@ -1,8 +1,7 @@
 package vn.vnpt.util.common;
 
-import lombok.*;
-
 import java.time.LocalDate;
+import lombok.*;
 
 @Getter
 @Setter
@@ -10,8 +9,8 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 public class TimeDto {
-    private Integer week;
-    private LocalDate fromDate;
-    private LocalDate toDate;
-    private Integer year;
+  private Integer week;
+  private LocalDate fromDate;
+  private LocalDate toDate;
+  private Integer year;
 }

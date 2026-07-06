@@ -236,6 +236,32 @@
             <artifactId>javase</artifactId>
             <version>3.4.1</version>
         </dependency>
+        <!--
+          ArchUnit — package-boundary tests (Story 0.4). Version pinned explicitly because
+          util/pom.xml has no project parent (Story 0.1 / R-01 Option A — inline dependencyManagement),
+          so root dependencyManagement version is NOT inherited. Same pin policy applies.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+          Apicurio Registry schema-util-avro — Avro compatibility checker (Story 0.4 / NFR-MIG-2).
+          Provides io.apicurio.registry.rules.compatibility.AvroCompatibilityChecker.
+          Version pinned 2.6.13.Final to match the dev docker-compose Apicurio image (Story 0.3),
+          avoiding drift between CI gate and runtime schema registry. Note: the spec named
+          apicurio-registry-client as the dep but that artifact is the REST client (does NOT
+          contain the compatibility checker). The checker lives in apicurio-registry-schema-util-avro.
+          Scope is compile (NOT test) because AvroCompatCheck + AvroCompatCheckCli live under
+          src/main/java and need the type at compile time.
+        -->
+        <dependency>
+            <groupId>io.apicurio</groupId>
+            <artifactId>apicurio-registry-schema-util-avro</artifactId>
+            <version>2.6.13.Final</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -265,6 +291,28 @@
                 <version>4.0.0</version>
                 <configuration>
                     <skip>true</skip>
+                </configuration>
+            </plugin>
+            <!--
+              Spotless — Java format enforcement. Version pinned explicitly because
+              util/pom.xml has no project parent (Story 0.1 / R-01 Option A — inline
+              dependencyManagement), so root pluginManagement version is NOT inherited.
+              googleJavaFormat GOOGLE style matches Spring convention (K&R braces for
+              control flow) per CONVENTIONS.md §4 line 145.
+            -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>3.8.0</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <style>GOOGLE</style>
+                        </googleJavaFormat>
+                        <removeUnusedImports/>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </java>
                 </configuration>
             </plugin>
         </plugins>

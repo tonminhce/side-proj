@@ -10,10 +10,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class JsonPermission {
-    String _id;
-    String code;
-    String name;
-    Integer status;
-    String description;
-    String conversionString;
+  String _id;
+  String code;
+  String name;
+  Integer status;
+  String description;
+  String conversionString;
 }

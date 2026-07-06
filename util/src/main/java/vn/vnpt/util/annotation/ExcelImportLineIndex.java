@@ -4,9 +4,8 @@ import java.lang.annotation.*;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-@Target(value = { ElementType.FIELD, ElementType.ANNOTATION_TYPE })
+@Target(value = {ElementType.FIELD, ElementType.ANNOTATION_TYPE})
 public @interface ExcelImportLineIndex {
 
-    boolean lineIndexer() default true;
-
+  boolean lineIndexer() default true;
 }

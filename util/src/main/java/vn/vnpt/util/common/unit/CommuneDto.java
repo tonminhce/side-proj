@@ -9,6 +9,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class CommuneDto {
 
-    private Long uuid;
-    private String communeName;
+  private Long uuid;
+  private String communeName;
 }

@@ -7,5 +7,5 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface SoftUks {
-    SoftUk[] value();
+  SoftUk[] value();
 }

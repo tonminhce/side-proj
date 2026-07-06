@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TitleInfo {
-    String title;
-    Integer row;
-    Integer col;
+  String title;
+  Integer row;
+  Integer col;
 }

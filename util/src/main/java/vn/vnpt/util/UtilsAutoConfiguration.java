@@ -20,44 +20,50 @@ import vn.vnpt.util.telegram.TelegramBotAPIUtil;
 @RequiredArgsConstructor
 @Configuration
 @ComponentScan
-@EnableConfigurationProperties({ FileProperties.class, FolderProperties.class, TelegramProperties.class })
+@EnableConfigurationProperties({
+  FileProperties.class,
+  FolderProperties.class,
+  TelegramProperties.class
+})
 public class UtilsAutoConfiguration {
 
-    private final FileProperties fileProperties;
+  private final FileProperties fileProperties;
 
-    private final FolderProperties folderProperties;
+  private final FolderProperties folderProperties;
 
-    private final TelegramProperties telegramProperties;
+  private final TelegramProperties telegramProperties;
 
-    @Bean
-    public FileUtil fileUtil() {
-        return new FileUtil(
-                folderProperties.getFolderTemp(), folderProperties.getFolderTemplate(),
-                fileProperties.getEndPoint(), fileProperties.getAccessKey(),
-                fileProperties.getSecretKey(),
-                fileProperties.getBucketName(),
-                fileProperties.getPublicBucketName(),
-                fileProperties.getDvcBucketName(),
-                fileProperties.getSubDirectory());
-    }
+  @Bean
+  public FileUtil fileUtil() {
+    return new FileUtil(
+        folderProperties.getFolderTemp(),
+        folderProperties.getFolderTemplate(),
+        fileProperties.getEndPoint(),
+        fileProperties.getAccessKey(),
+        fileProperties.getSecretKey(),
+        fileProperties.getBucketName(),
+        fileProperties.getPublicBucketName(),
+        fileProperties.getDvcBucketName(),
+        fileProperties.getSubDirectory());
+  }
 
-    @Bean
-    public SnowflakeIdGenerator snowflakeIdGenerator() {
-        return new SnowflakeIdGenerator(SnowflakeIdGenerator.getWorkerIdFromPod());
-    }
+  @Bean
+  public SnowflakeIdGenerator snowflakeIdGenerator() {
+    return new SnowflakeIdGenerator(SnowflakeIdGenerator.getWorkerIdFromPod());
+  }
 
-    @Bean
-    public TemplateExcelWriter templateExcelWriter() {
-        return new TemplateExcelWriter();
-    }
+  @Bean
+  public TemplateExcelWriter templateExcelWriter() {
+    return new TemplateExcelWriter();
+  }
 
-    @Bean
-    public JavaMailSender javaMailSender() {
-        return new JavaMailSenderImpl();
-    }
+  @Bean
+  public JavaMailSender javaMailSender() {
+    return new JavaMailSenderImpl();
+  }
 
-    @Bean
-    public TelegramBotAPIUtil telegramBotAPIUtil() {
-        return new TelegramBotAPIUtil(telegramProperties);
-    }
+  @Bean
+  public TelegramBotAPIUtil telegramBotAPIUtil() {
+    return new TelegramBotAPIUtil(telegramProperties);
+  }
 }

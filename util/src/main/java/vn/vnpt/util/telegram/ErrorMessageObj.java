@@ -12,14 +12,14 @@ import org.springframework.web.util.ContentCachingResponseWrapper;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ErrorMessageObj {
-    private String requestBody;
-    private ContentCachingRequestWrapper wrappedReq;
-    private ContentCachingResponseWrapper wrappedRes;
-    private String requestURI;
-    private String method;
-    private int status;
-    private String service;
-    private Exception exceptionCaught;
-    private String remoteHost;
-    private String username;
+  private String requestBody;
+  private ContentCachingRequestWrapper wrappedReq;
+  private ContentCachingResponseWrapper wrappedRes;
+  private String requestURI;
+  private String method;
+  private int status;
+  private String service;
+  private Exception exceptionCaught;
+  private String remoteHost;
+  private String username;
 }

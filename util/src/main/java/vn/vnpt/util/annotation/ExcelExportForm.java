@@ -2,29 +2,29 @@ package vn.vnpt.util.annotation;
 
 import java.lang.annotation.*;
 
-@Target(value = { ElementType.FIELD })
+@Target(value = {ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(ExcelExportForm.List.class)
 public @interface ExcelExportForm {
 
-    String sheetName() default "";
+  String sheetName() default "";
 
-    boolean compareSheetName() default false;
+  boolean compareSheetName() default false;
 
-    int sheetIndex();
+  int sheetIndex();
 
-    String cell() default "";
+  String cell() default "";
 
-    String[] cellArray() default {};
+  String[] cellArray() default {};
 
-    int startRow() default 0; // for list object
+  int startRow() default 0; // for list object
 
-    Class<?>[] groups() default {};
+  Class<?>[] groups() default {};
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target({ ElementType.FIELD })
-    @Documented
-    @interface List {
-        ExcelExportForm[] value();
-    }
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.FIELD})
+  @Documented
+  @interface List {
+    ExcelExportForm[] value();
+  }
 }

@@ -9,6 +9,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DistrictDto {
 
-    private Long uuid;
-    private String districtName;
+  private Long uuid;
+  private String districtName;
 }

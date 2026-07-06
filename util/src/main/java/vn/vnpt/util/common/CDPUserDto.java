@@ -8,9 +8,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CDPUserDto {
-    String userName;
-    String password;
-    String scope = "openid";
-    String clientId = "green-dev";
-    String grantType = "password";
+  String userName;
+  String password;
+  String scope = "openid";
+  String clientId = "green-dev";
+  String grantType = "password";
 }

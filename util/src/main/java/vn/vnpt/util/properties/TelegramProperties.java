@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "telegram", ignoreUnknownFields = false)
 public class TelegramProperties {
-    private String errorBotToken;
-    private String errorGroupChatId;
-    private Boolean isSendError = true;
+  private String errorBotToken;
+  private String errorGroupChatId;
+  private Boolean isSendError = true;
 }

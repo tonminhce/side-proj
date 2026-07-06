@@ -1,0 +1,84 @@
+# ponytail: GitHub Actions only honors .github/workflows/* at the repository root.
+# Architecture references platform/ci-cd/.github/workflows/ci.yml — that path is
+# not canonical for GH Actions. The working file lives here; platform/ci-cd/
+# is the documentation home. See platform/ci-cd/README.md.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '25'
+  NODE_VERSION: '22'
+
+jobs:
+  build:
+    name: Build + lint + Avro compat
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }} (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # 1. Unit tests — regression for Stories 0.1/0.2/0.3; baseline 21/21.
+      #    New ArchUnit (2) + AvroCompatCheck (3) tests bring the count to >= 26/26.
+      - name: Unit tests (mvn -pl util -am test)
+        run: mvn -pl util -am test
+
+      # 2. Validate — proves all 17 <module> entries resolve.
+      - name: Reactor validate (mvn validate)
+        run: mvn validate
+
+      # 3. ArchUnit — package-boundary enforcement. Fail-fast on cross-service
+      #    infra imports or forbidden API patterns.
+      - name: ArchUnit package-boundary tests
+        run: mvn -pl util -am test -Dtest='*ArchUnitTest,*ForbiddenDependencyPatternsTest'
+
+      # 4. Spotless — Java format check. Fails the build on format drift.
+      - name: Spotless check (Java)
+        run: mvn -pl util spotless:check
+
+      # 5. Prettier — TypeScript / JSON / MD format check. npx --yes fetches
+      #    Prettier 3.3.3 on first run; no package.json in Sprint 0.
+      - name: Prettier check (TypeScript)
+        run: npx --yes prettier@3.3.3 --check 'frontend/**/*.{ts,tsx,js,jsx,json,md}' --ignore-path frontend/.prettierignore
+
+      # 6. Avro compat — runs only when .avsc files under services/** change.
+      #    Sprint 0 has no .avsc files → step is skipped. Story 1.3 wires real
+      #    schemas; this gate then becomes binding.
+      - name: Detect changed Avro schemas
+        id: avro-changed
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            avro:
+              - 'services/**/src/main/avro/**.avsc'
+
+      - name: Avro compatibility check (Apicurio)
+        if: steps.avro-changed.outputs.avro == 'true'
+        run: mvn -pl util test -Dtest=AvroCompatCheckCli -q

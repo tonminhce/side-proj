@@ -2,36 +2,35 @@ package vn.vnpt.util.annotation;
 
 import java.lang.annotation.*;
 
-@Target(value = { ElementType.TYPE })
+@Target(value = {ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(ExcelExportGeneralConfig.List.class)
 public @interface ExcelExportGeneralConfig {
 
-    String exportNameCombine() default "";
+  String exportNameCombine() default "";
 
-    String exportName();
+  String exportName();
 
-    String template();
+  String template();
 
-    int startRow() default 1;
+  int startRow() default 1;
 
-    boolean hasSampleRow() default false;
+  boolean hasSampleRow() default false;
 
-    boolean isEvaluateFormula() default true;
+  boolean isEvaluateFormula() default true;
 
-    int[] lockSheetIndex() default {};
+  int[] lockSheetIndex() default {};
 
-    String styleTemplateName() default "";
+  String styleTemplateName() default "";
 
-    Class<?>[] groups() default {};
+  Class<?>[] groups() default {};
 
-    boolean dynamicTitle() default false;
+  boolean dynamicTitle() default false;
 
-
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target({ ElementType.TYPE })
-    @Documented
-    @interface List {
-        ExcelExportGeneralConfig[] value();
-    }
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.TYPE})
+  @Documented
+  @interface List {
+    ExcelExportGeneralConfig[] value();
+  }
 }

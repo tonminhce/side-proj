@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CDPTokenResultDto {
-    private Integer statusCode;
-    private String token;
-    private String message;
+  private Integer statusCode;
+  private String token;
+  private String message;
 }

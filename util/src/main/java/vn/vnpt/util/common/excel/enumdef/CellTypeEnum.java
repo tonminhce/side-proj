@@ -1,14 +1,13 @@
 package vn.vnpt.util.common.excel.enumdef;
 
 public enum CellTypeEnum {
+  BOOLEAN,
 
-    BOOLEAN,
+  DATE,
 
-    DATE,
+  STRING,
 
-    STRING,
+  INTEGER,
 
-    INTEGER,
-
-    DECIMAL
+  DECIMAL
 }

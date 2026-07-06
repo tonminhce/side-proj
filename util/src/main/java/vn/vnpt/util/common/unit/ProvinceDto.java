@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class ProvinceDto {
 
-    private String uuid;
-    private String provinceName;
-    private String provinceCode;
+  private String uuid;
+  private String provinceName;
+  private String provinceCode;
 }

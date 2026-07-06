@@ -9,14 +9,13 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ExcelExportConfigInfo {
 
-    private int startColumnIndex;
+  private int startColumnIndex;
 
-    private int startRowIndex;
+  private int startRowIndex;
 
-    private boolean autoCreateHeader;
+  private boolean autoCreateHeader;
 
-    private boolean autoResizeColumn;
+  private boolean autoResizeColumn;
 
-    private boolean autoCreateSheet;
-
+  private boolean autoCreateSheet;
 }
