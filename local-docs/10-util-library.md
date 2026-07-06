@@ -134,7 +134,10 @@ SoftDeletable (interface)
 ```
 
 - Epoch = `2025-01-01 00:00:00 UTC+7` (= `1735689600000`).
-- Worker id derived from `POD_NAME` env var; otherwise `SecureRandom().nextInt(8)`.
+- Worker id derived from `POD_NAME` env var (must match `.*-(\d+)$`).
+- In `spring.profiles.active=dev` (or unset): SecureRandom fallback with WARN log.
+- In `prod` / `staging` without valid POD_NAME: throws `WorkerIdMissingException` at boot (ADR-22, R-08 mitigation).
+- Metric `snowflake_worker_id_source` gauge with `source` tag (`podname`=1, `securerandom`=2) per ADR-22.
 - 4 096 ids / ms / worker.
 
 ### 5.3 JasperReports
@@ -178,6 +181,7 @@ Telegram payload includes request / response bodies (as temp `.txt` attachments)
 | # | Location | Issue | Severity | Fix sketch |
 |---|---|---|---|---|
 | 1 | `SnowflakeIdGenerator` | `workerId` is a `static` field; second `UtilsAutoConfiguration` boot in tests will overwrite it. | medium | Pass worker id explicitly to constructor, store in instance field. |
+| 1a | `SnowflakeIdGenerator.getWorkerIdFromPod()` | R-08 mitigation in Story 0.5: throw `WorkerIdMissingException` instead of silent SecureRandom fallback when POD_NAME missing in non-dev profile. | resolved | ADR-22 binding — failure must surface at boot. |
 | 2 | `SnowflakeIdGenerator.generateId()` | On rollover `seq=0` it calls `waitForNextMillis` but does not re-check that timestamp actually advanced under NTP slew. | low | Use `redis.call('TIME')` if going distributed; otherwise leave `synchronized` and trust wall clock. |
 | 3 | `RootEntity.preUpdate()` | When entity is being created (`id` not yet DB-assigned but `createdAt` populated by `BaseEntity.@PrePersist`), `preUpdate` is still invoked by Hibernate if the entity is dirty — risk of double-setting audit fields. | low | Guard `preUpdate` with `if (id == null) return;` or rely on `@PrePersist` exclusively. |
 | 4 | `GlobalExceptionHandler` | Method `ahandleException` (typo) handles `CustomException`; second method `updateException` (no `a` prefix) handles `UpdateException`. Cosmetic only. | trivial | Rename to `handleCustomException` / `handleUpdateException`. |

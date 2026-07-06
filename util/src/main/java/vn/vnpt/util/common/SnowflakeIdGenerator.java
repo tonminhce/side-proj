@@ -13,6 +13,12 @@
     + Tốc độ cao: Hỗ trợ 32,768 ID/ms.
     + Chạy tốt trên 1 database mà không cần cluster.
     + Dễ mở rộng: Nếu sau này cần phân tán, chỉ cần thêm datacenterId.
+
+    Story 0.5 (ADR-22 / R-08): worker-id resolution is now profile-aware. In non-dev profiles
+    (prod / staging), a missing or malformed POD_NAME throws WorkerIdMissingException at boot
+    instead of silently falling back to SecureRandom. The dev profile keeps the SecureRandom
+    fallback (with a WARN log line). Note: the static `workerId` field is unchanged; that
+    static-state issue is tracked separately per local-docs/10 §6 #1.
 */
 package vn.vnpt.util.common;
 
@@ -20,6 +26,8 @@ import java.security.SecureRandom;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SnowflakeIdGenerator {
   private static final long EPOCH = 1735689600000L; // 2025-01-01 00:00:00 UTC+7
@@ -35,6 +43,9 @@ public class SnowflakeIdGenerator {
   private static long workerId;
   private static final AtomicLong sequence = new AtomicLong(0L);
   private static final AtomicLong lastTimestamp = new AtomicLong(-1L);
+
+  // ponytail: explicit Logger field matches the rest of util/common (no Lombok @Slf4j here).
+  private static final Logger log = LoggerFactory.getLogger(SnowflakeIdGenerator.class);
 
   public SnowflakeIdGenerator(long workerId) {
     SnowflakeIdGenerator.workerId = workerId;
@@ -77,13 +88,56 @@ public class SnowflakeIdGenerator {
     return zdtPlus7.toInstant().toEpochMilli();
   }
 
-  public static long getWorkerIdFromPod() {
-    String podName = System.getenv("POD_NAME"); // Lấy POD_NAME từ biến môi trường
+  /**
+   * Reads {@code spring.profiles.active} from system properties first, then falls back to the
+   * {@code SPRING_PROFILES_ACTIVE} environment variable (Spring's own precedence). Returns the
+   * trimmed value, or an empty string when unset. Note: {@link #getWorkerIdFromPod()} is a static
+   * method called from a {@code @Bean} factory with no injected {@code Environment}, so reading
+   * system properties is the documented escape hatch.
+   */
+  private static String resolveActiveProfile() {
+    String fromProperty = System.getProperty("spring.profiles.active");
+    if (fromProperty != null && !fromProperty.isBlank()) {
+      return fromProperty.trim();
+    }
+    String fromEnv = System.getenv("SPRING_PROFILES_ACTIVE");
+    return fromEnv == null ? "" : fromEnv.trim();
+  }
 
-    if (podName == null || !podName.matches(".*-(\\d+)$")) {
-      return new SecureRandom().nextInt(8); // Nếu không có, sinh workerId random (0-7)
+  /**
+   * Returns {@code true} when the profile string is null/empty or contains {@code "dev"} (case
+   * insensitive). The profile string is comma-separated; this is an intentional loose match per
+   * Story 0.5 Subtask 2.2 (ponytail: don't parse CSV rigorously; R-08 is about deploy-time
+   * detection, not profile-string parsing).
+   */
+  private static boolean isDevProfile(String profile) {
+    return profile == null || profile.isEmpty() || profile.toLowerCase().contains("dev");
+  }
+
+  public static long getWorkerIdFromPod() {
+    String podName = System.getenv("POD_NAME");
+    String profile = resolveActiveProfile();
+
+    // Branch A — POD_NAME present and matches replica-suffix pattern: deterministic worker id.
+    if (podName != null && podName.matches(".*-(\\d+)$")) {
+      return Long.parseLong(podName.replaceAll(".*-(\\d+)$", "$1")) % 8; // 0-7
     }
 
-    return Long.parseLong(podName.replaceAll(".*-(\\d+)$", "$1")) % 8; // Giới hạn workerId từ 0-7
+    // Branch B — dev profile (or unset): keep SecureRandom fallback, with a WARN log line.
+    if (isDevProfile(profile)) {
+      log.warn(
+          "SnowflakeIdGenerator: POD_NAME not set in profile '{}' — falling back to SecureRandom",
+          profile.isEmpty() ? "(unset)" : profile);
+      return new SecureRandom().nextInt(8); // 0-7
+    }
+
+    // Branch C — non-dev profile (prod / staging): throw at boot per ADR-22 / R-08.
+    throw new WorkerIdMissingException(
+        "POD_NAME env var is required in profile '"
+            + (profile.isEmpty() ? "(unset)" : profile)
+            + "' for Snowflake worker-id (ADR-22). POD_NAME='"
+            + (podName == null ? "null" : podName)
+            + "'. Set POD_NAME (K8s downward API: fieldRef: metadata.name) OR run with"
+            + " spring.profiles.active=dev for local dev.");
   }
 }
