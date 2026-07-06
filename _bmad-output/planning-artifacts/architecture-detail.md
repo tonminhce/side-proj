@@ -85,6 +85,17 @@ The `util/` library ships multi-tenant primitives: `TenantInterceptor`, `TenantR
 - **Why keep the code:** removing the multi-tenant code from util/ would be a breaking change to anyone using util/ outside this project (it's a shared library). Keeping it dormant in v1 is a non-breaking choice.
 - **Documentation:** add a `tenant-disabled-v1.md` note in `util/config/tenant/` explaining how to activate for v2.
 
+#### Implementation notes (Sprint 0 — R-01 fix, Story 0.1)
+
+Version pinning decided during Sprint 0 R-01 fix; recorded here per Story 0.1 AC #5.
+
+- **Spring Boot BOM:** `org.springframework.boot:spring-boot-dependencies:4.0.0` — imported in `util/pom.xml` `<dependencyManagement>` with `<type>pom</type><scope>import</scope>`. Pinned exactly; do not float to `4.x` or to a `-SNAPSHOT`.
+- **Spring Cloud BOM:** `org.springframework.cloud:spring-cloud-dependencies:2025.1.0` — imported alongside the Boot BOM in `util/pom.xml`. Coordinated train release; do not mix with mismatched Boot/Cloud versions.
+- **Java baseline:** `<release>25</release>` on `maven-compiler-plugin`; `<java.version>25</java.version>` in `util/pom.xml` properties. Java 25 LTS.
+- **Maven baseline:** 3.9+ required (system used during verification: 3.9.16).
+- **Why inlined in `util/pom.xml`:** util was originally a child of `vn.vnpt:be:0.0.1-SNAPSHOT</parent>` (relativePath `../pom.xml`); that parent does not exist in this repo, so `mvn install` failed with `ParentNotFoundException`. Story 0.2 will bootstrap a multi-module root `pom.xml` and may move these imports up; until then they live in `util/pom.xml`.
+- **Scope for downstream services:** every `services/<name>/` module that imports `util` will transitively inherit both BOMs through `util`'s `dependencyManagement`. Service-specific poms should NOT re-import these BOMs — duplication risks version skew.
+
 ### Detail: ADR-04 (Event-driven foundation)
 
 - **Event catalog** follows `domain-research.md` `aggregate.action` naming: `orders.lifecycle`, `payment.lifecycle`, `inventory.lifecycle`, `shipment.lifecycle`, `returns.lifecycle`, `catalog.lifecycle`, `customer.lifecycle`, `cart.lifecycle`, `pricing.lifecycle`, `review.lifecycle`, `notification.lifecycle`.

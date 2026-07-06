@@ -25,7 +25,7 @@ It auto-configures itself via `UtilsAutoConfiguration` so consumers just drop it
 | `groupId` | `vn.vnpt` |
 | `artifactId` | `util` |
 | `version` | `0.0.1-SNAPSHOT` |
-| `parent` | `vn.vnpt:be:0.0.1-SNAPSHOT` |
+| `parent` | (removed in Sprint 0 / R-01 fix; dependencyManagement inlined in util/pom.xml) |
 | `packaging` | `jar` |
 
 Spring Boot Maven plugin is **disabled** (`<skip>true</skip>`) — this is a library, not an executable service. Install with `mvn clean install -DskipTests` from `util/`.
