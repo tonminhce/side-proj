@@ -1,18 +1,19 @@
 package vn.vnpt.inventory.application.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.Commit;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,9 +48,8 @@ import vn.vnpt.inventory.InventoryApplication;
  */
 @SpringBootTest(classes = InventoryApplication.class)
 @ActiveProfiles("test")
+@TestPropertySource(properties = {"catalog.events.signature="})
 @Testcontainers
-@Transactional
-@Commit
 class CatalogEventListenerTest {
 
   @Container
@@ -80,13 +80,20 @@ class CatalogEventListenerTest {
   void onCatalogProductCreated_insertsLedgerRow() {
     listener.on(new CatalogProductCreated(100L, "red-shirt", "Red Shirt", "2026-07-07T00:00:00Z"));
 
-    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-    Integer count =
-        jdbc.queryForObject(
-            "SELECT COUNT(*) FROM inventory_ledger WHERE variant_id = ? AND delta = 0 AND reason = 'received'",
-            Integer.class,
-            100L);
-    assertThat(count).isEqualTo(1);
+    // @ApplicationModuleListener dispatches async on a Modulith executor; await the insert.
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .untilAsserted(
+            () -> {
+              Integer count =
+                  new JdbcTemplate(dataSource)
+                      .queryForObject(
+                          "SELECT COUNT(*) FROM inventory_ledger WHERE variant_id = ?"
+                              + " AND delta = 0 AND reason = 'received'",
+                          Integer.class,
+                          100L);
+              assertThat(count).isEqualTo(1);
+            });
   }
 
   @Test
@@ -96,12 +103,17 @@ class CatalogEventListenerTest {
     listener.on(event);
     listener.on(event);
 
-    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-    Integer count =
-        jdbc.queryForObject(
-            "SELECT COUNT(*) FROM inventory_ledger WHERE variant_id = ?",
-            Integer.class,
-            200L);
-    assertThat(count).isEqualTo(1);
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .untilAsserted(
+            () -> {
+              Integer count =
+                  new JdbcTemplate(dataSource)
+                      .queryForObject(
+                          "SELECT COUNT(*) FROM inventory_ledger WHERE variant_id = ?",
+                          Integer.class,
+                          200L);
+              assertThat(count).isEqualTo(1);
+            });
   }
 }

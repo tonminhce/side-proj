@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import vn.vnpt.catalog.domain.event.CatalogProductCreated;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
@@ -88,8 +89,9 @@ public class CatalogEventListener {
   private String catalogSignature;
 
   @ApplicationModuleListener
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   void on(CatalogProductCreated event) {
+    log.debug("CatalogEventListener.on called: productUuid={}", event.getProductUuid());
     if (shouldVerify()) {
       boolean valid =
           HmacEventSigner.verify(CONSUMER_ENVELOPE, catalogSignature, catalogServiceSecret);

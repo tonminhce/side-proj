@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # story-automator review — 1-4 done (HIGH BFF tenant bug fixed + tests strengthened)
+last_updated: 2026-07-07  # story-automator review — 1-5 done (CRITICAL CatalogEventListenerTest discovery bug + @Transactional REQUIRES_NEW fixed; tests 35/35; util baseline 57/57 preserved)
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -36,7 +36,7 @@ development_status:
   1-2-product-aggregate-variant-graph-fr-1-fr-2-fr-4: done
   1-3-catalog-change-events-with-avro-strict-compat-fr-5: done
   1-4-admin-ui-catalog-read-view-fr-6-fr-7: done  # story-automator review — HIGH BFF tenant bug fixed; tests +2 catalog +3 frontend documented
-  1-5-inventoryservice-per-warehouse-ledger-fr-8: review  # story-automator review — 22/22 inventory tests + 57/57 util baseline preserved; append-only ledger + first in-process consumer + HMAC trust/strict mode
+  1-5-inventoryservice-per-warehouse-ledger-fr-8: done  # story-automator review — CRITICAL CatalogEventListenerTest discovery bug + @Transactional REQUIRES_NEW fixed; tests 35/35; util baseline 57/57 preserved
   1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause: backlog
   1-7-multi-warehouse-per-variant-stock-fr-10: backlog
   1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: backlog
