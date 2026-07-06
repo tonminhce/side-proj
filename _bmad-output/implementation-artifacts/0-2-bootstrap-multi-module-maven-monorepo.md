@@ -4,7 +4,7 @@ baseline_commit: 454c85205539af42207a1194b3cb2b7cf3aa230b
 
 # Story 0.2: Bootstrap multi-module Maven monorepo
 
-Status: in-progress
+Status: review
 
 <!-- Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -31,36 +31,36 @@ so that each Sprint can scaffold a service module into the established layout.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Convert root `pom.xml` into a parent pom (AC: 7, 8, 9)
-  - [ ] Subtask 1.1: Change `<groupId>` from `org.example` to `vn.vnpt`. Keep `<artifactId>side-project</artifactId>` and `<version>1.0-SNAPSHOT</version>` (existing commit history references these names; minimal diff wins per Story 0.1's lesson).
-  - [ ] Subtask 1.2: Set `<packaging>pom</packaging>`.
-  - [ ] Subtask 1.3: Add `<modules>` listing: `util`, the 14 service names (`catalog`, `inventory`, `cart`, `checkout`, `payment`, `order`, `fulfillment`, `returns`, `customer`, `search`, `notification`, `admin`, `pricing`, `invoice`), plus the 2 BFF surfaces (`bff/storefront-bff`, `bff/admin-bff`). Order them roughly by Epic order so the reactor makes pedagogical sense (catalog first, invoice last).
-  - [ ] Subtask 1.4: Add `<properties>` for `java.version=25`, `project.build.sourceEncoding=UTF-8`, `maven.compiler.source=25`, `maven.compiler.target=25`. Do **not** re-import the Boot/Cloud BOMs here — `util`'s `<dependencyManagement>` is the single source per architecture-detail.
-  - [ ] Subtask 1.5: Add `<pluginManagement>` with `maven-compiler-plugin:3.14.1` and `spring-boot-maven-plugin:4.0.0` versions (the values the Boot 4 BOM pins; matches Story 0.1's follow-up commit F9).
-- [ ] Task 2: Create `services/<name>/` Maven modules (AC: 3, 7)
-  - [ ] Subtask 2.1: For each of the 14 service names, `mkdir -p services/<name>/` and create a 12-line `pom.xml`: parent = root, groupId = `vn.vnpt`, artifactId = `<name>`, packaging = `pom` (placeholder until Epic 1+ adds code, at which point it flips to `jar`). No dependencies, no plugins — purely a reactor participant.
-  - [ ] Subtask 2.2: Add a `README.md` stub (3 lines) to each service dir stating the bounded context and the FRs it owns (copy from architecture §"Service Boundaries" table, lines 900–915).
-- [ ] Task 3: Create BFF Maven modules (AC: 4, 7)
-  - [ ] Subtask 3.1: `mkdir -p bff/storefront-bff/{src/main/java/vn/vnpt/bff/storefront/{api,client,compositIon,config},src/main/resources}` — directory tree per architecture line 758–763 (note: `compositIon` is the original spelling in the architecture — preserve it; do not "fix" to `composition`).
-  - [ ] Subtask 3.2: `mkdir -p bff/admin-bff/{src/main/java/vn/vnpt/bff/admin/{api,client,compositIon,config},src/main/resources}`.
-  - [ ] Subtask 3.3: Placeholder `pom.xml` for each BFF (same 12-line template as services; artifactId `storefront-bff` and `admin-bff` respectively).
-  - [ ] Subtask 3.4: Placeholder `README.md` per BFF.
-- [ ] Task 4: Create non-Java directories (AC: 5, 6)
-  - [ ] Subtask 4.1: Frontend (Next.js 15 / TypeScript — no Maven): `mkdir -p frontend/storefront frontend/admin frontend/packages/{ui,types,eslint-config}`. Do **not** create `package.json`, `tsconfig.json`, etc. — those arrive with their own stories (storefront app lands with Epic 2's checkout flow; admin with Epic 5/8). Empty dirs are fine for this story.
-  - [ ] Subtask 4.2: Platform: `mkdir -p platform/observability/{otel-config,grafana-dashboards,prometheus-rules,loki-schemas,tempo-config} platform/policies/opa platform/chaos/chaos-mesh platform/runbooks platform/ci-cd/.github/workflows platform/ci-cd/argocd`.
-  - [ ] Subtask 4.3: Dev (local-only): `mkdir -p dev/seed-data platform/ci-cd/argocd`. The docker-compose file itself lands in Story 0.3.
-  - [ ] Subtask 4.4: Helm: `mkdir -p helm/<name>` for the 14 service names (parallel to `services/`).
-  - [ ] Subtask 4.5: Docs: `mkdir -p docs/adr docs/diagrams docs/runbooks docs/slos docs/tutorials`. Add `docs/adr/0001-record-architecture-decisions.md` with the standard "Status: Accepted" stub (10 lines) so the ADR folder is not literally empty.
-- [ ] Task 5: Verify the reactor builds (AC: 10, 11, 12)
-  - [ ] Subtask 5.1: From project root: `mvn -pl util -am clean install -DskipTests`. Confirm `BUILD SUCCESS` and exit 0. The `-am` flag now correctly resolves `util`'s parent (root) before building `util`.
-  - [ ] Subtask 5.2: From project root: `mvn test` (or `mvn -pl util -am test`). Confirm `ExcelImportExportHelperTest` (15/15) and `UtilsAutoConfigurationMetadataTest` (2/2) pass — total 17/17, matching Story 0.1's verified count. Zero regressions.
-  - [ ] Subtask 5.3: Confirm `util/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` byte-for-byte unchanged vs Story 0.1.
-  - [ ] Subtask 5.4: Run `mvn validate` from root to confirm every `<module>` path resolves (all 17 directories — util, 14 services, 2 BFFs — must exist). `validate` will fail if any module path is missing.
-- [ ] Task 6: Commit on the current branch and open PR (AC: all)
-  - [ ] Subtask 6.1: Stay on `fix/r-01-util-parent-pom` if it's still the working branch (Story 0.2 is a continuation of the Sprint 0 bootstrap). Per `CONVENTIONS.md`, prefix commits with `chore(monorepo): ...` or `feat(monorepo): ...`.
-  - [ ] Subtask 6.2: Stage `pom.xml`, all `services/<name>/pom.xml`, both BFF poms, all new directories.
-  - [ ] Subtask 6.3: Commit message: `feat(monorepo): bootstrap multi-module Maven reactor (Story 0.2)`. Reference architecture §"Project Structure & Boundaries", the risk register R-01 closure, and Story 0.1 (R-01 fix unblocked this).
-  - [ ] Subtask 6.4: Push branch and open PR. **Push requires GitHub credentials** — if `git push` returns `fatal: could not read Username`, surface that and ask the user to push themselves.
+- [x] Task 1: Convert root `pom.xml` into a parent pom (AC: 7, 8, 9)
+  - [x] Subtask 1.1: Change `<groupId>` from `org.example` to `vn.vnpt`. Keep `<artifactId>side-project</artifactId>` and `<version>1.0-SNAPSHOT</version>` (existing commit history references these names; minimal diff wins per Story 0.1's lesson).
+  - [x] Subtask 1.2: Set `<packaging>pom</packaging>`.
+  - [x] Subtask 1.3: Add `<modules>` listing: `util`, the 14 service names (`catalog`, `inventory`, `cart`, `checkout`, `payment`, `order`, `fulfillment`, `returns`, `customer`, `search`, `notification`, `admin`, `pricing`, `invoice`), plus the 2 BFF surfaces (`bff/storefront-bff`, `bff/admin-bff`). Order them roughly by Epic order so the reactor makes pedagogical sense (catalog first, invoice last).
+  - [x] Subtask 1.4: Add `<properties>` for `java.version=25`, `project.build.sourceEncoding=UTF-8`, `maven.compiler.source=25`, `maven.compiler.target=25`. Do **not** re-import the Boot/Cloud BOMs here — `util`'s `<dependencyManagement>` is the single source per architecture-detail.
+  - [x] Subtask 1.5: Add `<pluginManagement>` with `maven-compiler-plugin:3.14.1` and `spring-boot-maven-plugin:4.0.0` versions (the values the Boot 4 BOM pins; matches Story 0.1's follow-up commit F9).
+- [x] Task 2: Create `services/<name>/` Maven modules (AC: 3, 7)
+  - [x] Subtask 2.1: For each of the 14 service names, `mkdir -p services/<name>/` and create a 12-line `pom.xml`: parent = root, groupId = `vn.vnpt`, artifactId = `<name>`, packaging = `pom` (placeholder until Epic 1+ adds code, at which point it flips to `jar`). No dependencies, no plugins — purely a reactor participant.
+  - [x] Subtask 2.2: Add a `README.md` stub (3 lines) to each service dir stating the bounded context and the FRs it owns (copy from architecture §"Service Boundaries" table, lines 900–915).
+- [x] Task 3: Create BFF Maven modules (AC: 4, 7)
+  - [x] Subtask 3.1: `mkdir -p bff/storefront-bff/{src/main/java/vn/vnpt/bff/storefront/{api,client,compositIon,config},src/main/resources}` — directory tree per architecture line 758–763 (note: `compositIon` is the original spelling in the architecture — preserve it; do not "fix" to `composition`).
+  - [x] Subtask 3.2: `mkdir -p bff/admin-bff/{src/main/java/vn/vnpt/bff/admin/{api,client,compositIon,config},src/main/resources}`.
+  - [x] Subtask 3.3: Placeholder `pom.xml` for each BFF (same 12-line template as services; artifactId `storefront-bff` and `admin-bff` respectively).
+  - [x] Subtask 3.4: Placeholder `README.md` per BFF.
+- [x] Task 4: Create non-Java directories (AC: 5, 6)
+  - [x] Subtask 4.1: Frontend (Next.js 15 / TypeScript — no Maven): `mkdir -p frontend/storefront frontend/admin frontend/packages/{ui,types,eslint-config}`. Do **not** create `package.json`, `tsconfig.json`, etc. — those arrive with their own stories (storefront app lands with Epic 2's checkout flow; admin with Epic 5/8). Empty dirs are fine for this story.
+  - [x] Subtask 4.2: Platform: `mkdir -p platform/observability/{otel-config,grafana-dashboards,prometheus-rules,loki-schemas,tempo-config} platform/policies/opa platform/chaos/chaos-mesh platform/runbooks platform/ci-cd/.github/workflows platform/ci-cd/argocd`.
+  - [x] Subtask 4.3: Dev (local-only): `mkdir -p dev/seed-data platform/ci-cd/argocd`. The docker-compose file itself lands in Story 0.3.
+  - [x] Subtask 4.4: Helm: `mkdir -p helm/<name>` for the 14 service names (parallel to `services/`).
+  - [x] Subtask 4.5: Docs: `mkdir -p docs/adr docs/diagrams docs/runbooks docs/slos docs/tutorials`. Add `docs/adr/0001-record-architecture-decisions.md` with the standard "Status: Accepted" stub (10 lines) so the ADR folder is not literally empty.
+- [x] Task 5: Verify the reactor builds (AC: 10, 11, 12)
+  - [x] Subtask 5.1: From project root: `mvn -pl util -am clean install -DskipTests`. Confirm `BUILD SUCCESS` and exit 0. The `-am` flag now correctly resolves `util`'s parent (root) before building `util`.
+  - [x] Subtask 5.2: From project root: `mvn test` (or `mvn -pl util -am test`). Confirm `ExcelImportExportHelperTest` (15/15) and `UtilsAutoConfigurationMetadataTest` (2/2) pass — total 17/17, matching Story 0.1's verified count. Zero regressions.
+  - [x] Subtask 5.3: Confirm `util/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` byte-for-byte unchanged vs Story 0.1.
+  - [x] Subtask 5.4: Run `mvn validate` from root to confirm every `<module>` path resolves (all 17 directories — util, 14 services, 2 BFFs — must exist). `validate` will fail if any module path is missing.
+- [x] Task 6: Commit on the current branch and open PR (AC: all)
+  - [x] Subtask 6.1: Stay on `fix/r-01-util-parent-pom` if it's still the working branch (Story 0.2 is a continuation of the Sprint 0 bootstrap). Per `CONVENTIONS.md`, prefix commits with `chore(monorepo): ...` or `feat(monorepo): ...`.
+  - [x] Subtask 6.2: Stage `pom.xml`, all `services/<name>/pom.xml`, both BFF poms, all new directories.
+  - [x] Subtask 6.3: Commit message: `feat(monorepo): bootstrap multi-module Maven reactor (Story 0.2)`. Reference architecture §"Project Structure & Boundaries", the risk register R-01 closure, and Story 0.1 (R-01 fix unblocked this).
+  - [x] Subtask 6.4: Push branch and open PR. **Push requires GitHub credentials** — if `git push` returns `fatal: could not read Username`, surface that and ask the user to push themselves.
 
 ## Dev Notes
 
@@ -194,10 +194,39 @@ The repo still has no `mvnw` wrapper (Story 0.1 documented this). Continue using
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8
 
 ### Debug Log References
 
+- `mvn validate` initially failed with `Non-resolvable parent POM` for every service and BFF. Cause: child `<parent>` element lacked `<relativePath>`, so Maven's default `../pom.xml` lookup walked one level up (e.g. `services/pom.xml`) and missed the root. Fix: added `<relativePath>../../pom.xml</relativePath>` to each child pom (services sit 2 levels deep, BFFs sit 3 — but `../../pom.xml` works for both because BFF paths resolve to the same `pom.xml` at the root). Re-ran `mvn validate` → BUILD SUCCESS.
+
 ### Completion Notes List
 
+- Root `pom.xml` converted: groupId `org.example` → `vn.vnpt`; `<packaging>pom</packaging>`; `<modules>` lists 17 entries (util + 14 services + 2 BFFs); `<pluginManagement>` pins `maven-compiler-plugin:3.14.1` and `spring-boot-maven-plugin:4.0.0`. BOMs intentionally NOT re-imported — `util/pom.xml` remains the single source per architecture-detail.md ADR-01 line 97.
+- 14 service pom.xml files + README.md stubs created (catalog..invoice).
+- 2 BFF pom.xml files + README.md stubs created; BFF Java tree (`api/client/compositIon/config`) preserved with the architecture's original `compositIon` capitalization.
+- Frontend, platform, dev, helm, and docs directories scaffolded. Empty subdirs got `.gitkeep` so a clean clone preserves the tree. docs/adr/0001-record-architecture-decisions.md stub added.
+- Verification:
+  - `mvn validate` → BUILD SUCCESS (all 17 module paths resolve)
+  - `mvn -pl util -am clean install -DskipTests` → BUILD SUCCESS, exit 0
+  - `mvn -pl util -am test` → 17/17 pass (15/15 ExcelImportExportHelperTest + 2/2 UtilsAutoConfigurationMetadataTest)
+  - `util` autoconfig imports file: byte-for-byte unchanged (`git hash 6b79912c0ded051c8a88a35b593615dc5940fe76`)
+- Single commit on `fix/r-01-util-parent-pom`: `8a8295a feat(monorepo): bootstrap multi-module Maven reactor (Story 0.2)`. Push + PR open pending GitHub credentials (see Task 6.4).
+- R-01 closure: util is now a member of a real reactor, with parent = root pom. Story 0.1's inline-BOM fix in `util/pom.xml` is preserved unchanged; root pom does not re-import.
+- R-09 mitigation: any future `services/<name>/pom.xml` will inherit Spring Boot 4.0.0 + Spring Cloud 2025.1.0 BOMs transitively through `util`, eliminating the Boot 4 ecosystem version-skew risk.
+
 ### File List
+
+**Modified (2):**
+- `pom.xml`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+**Created (52):**
+- 14 × `services/<name>/pom.xml` (catalog, inventory, cart, checkout, payment, order, fulfillment, returns, customer, search, notification, admin, pricing, invoice)
+- 14 × `services/<name>/README.md` (same names)
+- 2 × `bff/storefront-bff/{pom.xml,README.md}`
+- 2 × `bff/admin-bff/{pom.xml,README.md}`
+- BFF Java tree: `bff/storefront-bff/src/main/{java/vn/vnpt/bff/storefront/{api,client,compositIon,config},resources}` and the equivalent under `bff/admin-bff/`
+- `docs/adr/0001-record-architecture-decisions.md`
+- `.gitkeep` markers under `frontend/{storefront,admin,packages/{ui,types,eslint-config}}`, `platform/{observability/{otel-config,grafana-dashboards,prometheus-rules,loki-schemas,tempo-config},policies/opa,chaos/chaos-mesh,runbooks,ci-cd/{.github/workflows,argocd}}`, `dev/seed-data/`, `helm/<14 service names>/`, `docs/{diagrams,runbooks,slos,tutorials}/`
+- `_bmad-output/implementation-artifacts/0-2-bootstrap-multi-module-maven-monorepo.md` (story status / checkboxes updated)
