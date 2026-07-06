@@ -13,6 +13,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.catalog.CatalogApplication;
+import vn.vnpt.catalog.application.port.ProductRepository;
+import vn.vnpt.catalog.application.port.VariantRepository;
 import vn.vnpt.catalog.domain.Product;
 import vn.vnpt.catalog.domain.Variant;
 
@@ -80,5 +82,37 @@ class VariantRepositoryTest {
         .get()
         .extracting(Variant::getSku)
         .isEqualTo("vr-sku-2-cccccccccccc");
+  }
+
+  /**
+   * AC #4 — the central claim: new attributes can be added without a Flyway migration because
+   * {@code variants.attributes} is JSONB. This test saves a variant with three keys including
+   * {@code "material":"cotton"} (which is NOT in V001/V002 DDL) and round-trips through the
+   * repository. If the column type regresses from JSONB to a typed map, this fails. If the
+   * round-trip drops a key, this fails.
+   */
+  @Test
+  void jsonbAttributes_roundTripPreservesAllKeys() {
+    Product product = products.save(Product.create("Red Shirt", "vr-sku-3", null, "Acme"));
+    Map<String, String> attrs = new java.util.LinkedHashMap<>();
+    attrs.put("color", "red");
+    attrs.put("size", "M");
+    attrs.put("material", "cotton");
+    variants.save(
+        Variant.builder()
+            .productUuid(product.getUuid())
+            .sku("vr-sku-3-ddddddddddd")
+            .attributes(attrs)
+            .priceCents(100L)
+            .currency("VND")
+            .build());
+
+    Variant reloaded = variants.findBySku("vr-sku-3-ddddddddddd").orElseThrow();
+    assertThat(reloaded.getAttributes())
+        .as("JSONB round-trip preserves all three keys including the schema-less 'material' key")
+        .containsOnlyKeys("color", "size", "material")
+        .containsEntry("color", "red")
+        .containsEntry("size", "M")
+        .containsEntry("material", "cotton");
   }
 }

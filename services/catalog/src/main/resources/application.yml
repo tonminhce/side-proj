@@ -1,0 +1,90 @@
+# services/catalog/src/main/resources/application.yml — Story 1.1 + 1.3
+# Per-service datasource. Defaults match dev/.env.example; prod secrets come from Vault
+# (architecture.md line 413 / ADR-21). No real secrets in this file.
+
+server:
+  port: 8081   # CatalogService: 8081. BFFs are 8080/8082 (Story 2.1).
+
+spring:
+  application:
+    name: catalog
+
+  main:
+    # Spring Boot 4 disabled bean override by default. util's library beans (e.g. RedisConfig's
+    # @Primary redisTemplate) intentionally override Spring Boot autoconfig beans; allow it.
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    # Story 1.3 (ponytail fallback): we write the outbox table directly to keep the
+    # architecture.md line 297 column shape. The Modulith bridge's JDBC
+    # EventPublicationRepository expects its own column names (ID, EVENT_TYPE, LISTENER_ID,
+    # SERIALIZED_EVENT, STATUS, COMPLETION_ATTEMPTS, …) and writes to EVENT_PUBLICATION,
+    # not our `outbox` table. Excluding the bridge's JdbcEventPublicationAutoConfiguration
+    # leaves the in-process @ApplicationModuleListener path intact (provided by
+    # spring-modulith-events-core's EventPublicationAutoConfiguration) but disables the
+    # bridge's JDBC persistence leg. ModulithOutboxPublisher provides a no-op
+    # EventPublicationRepository bean so the in-process event registry wires correctly.
+    # The CatalogEventLogger still fires via the ApplicationEventPublisher in
+    # ModulithOutboxPublisher. Story 1.5+ may re-enable the bridge by removing this exclude
+    # and aligning the schema.
+    exclude:
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CATALOG_DB:catalog_db}
+    username: ${POSTGRES_CATALOG_USER:catalog_user}
+    password: ${POSTGRES_CATALOG_PASSWORD:catalog_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns schema; JPA validates entity ↔ table mapping (Story 1.2 lands the first entity).
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # architecture.md anti-pattern guard: never auto-open a transaction in the view layer.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Story 1.1 is the FIRST migration; baseline-on-migrate keeps Flyway from refusing an empty schema.
+    baseline-on-migrate: true
+    table: flyway_schema_history   # default; explicit for readability
+
+  # Spring Modulith outbox bridge — Story 1.3 (ADR-01 / ADR-14 / ADR-20).
+  # Property names verified against spring-modulith-events-jdbc:2.0.7.
+  # The bridge's auto-config fires from the artifact on the classpath; no @EnableModulithEvents.
+  modulith:
+    events:
+      jdbc:
+        # 500ms poll per architecture-detail.md line 146 (ADR-14 operational).
+        # The bridge reads unpublished outbox rows in chronological order.
+        poll-interval: 500ms
+      outbox:
+        # Page on-call above 10k backlog rows (architecture-detail.md line 153).
+        publish-backpressure-threshold: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # minimal for AC #8; Story 10.1 expands to LGTM dashboard surface
+  endpoint:
+    health:
+      show-details: always    # AC #8: `db` component must report PostgreSQL details
+
+catalog:
+  events:
+    # Dev default: the bridge signs with this string. Production overrides via Vault
+    # at secret/events/hmac/catalog (architecture.md line 413 / ADR-18). A hardening
+    # story wires Vault + a startup check that asserts the secret is not the dev
+    # default in non-dev profiles.
+    hmac-secret: dev-only-secret-do-not-use-in-prod
+
+logging:
+  level:
+    vn.vnpt.catalog: INFO
+    # Modulith logs the package-boundary map at startup; useful for AC #2 verify.
+    org.springframework.modulith: INFO

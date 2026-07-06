@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  *       direction is {@code infrastructure → domain}, not the other way around. Domain code
  *       pulls in entities only; the application layer pulls in ports; infrastructure is
  *       allowed to know both. A reverse dependency would let the domain layer reach into
- *       {@code JdbcOutboxWriter} directly, bypassing {@code OutboxPublisher}.
+ *       {@code ModulithOutboxPublisher} directly, bypassing {@code OutboxPublisher}.
  * </ol>
  *
  * <p>util ({@code vn.vnpt.util..}) outside the tenant package IS allowed — it's the shared library.
@@ -96,6 +96,26 @@ class CatalogPackageBoundaryTest {
         .dependOnClassesThat()
         .resideInAnyPackage("vn.vnpt.catalog.infrastructure..")
         .because("DDD layering: domain depends on nothing; infrastructure depends on domain.")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.catalog"));
+  }
+
+  @Test
+  void application_doesNotDependOnInfrastructure() {
+    noClasses()
+        .that()
+        .resideInAPackage("vn.vnpt.catalog.application..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage("vn.vnpt.catalog.infrastructure..")
+        .because(
+            "DDD layering: application depends on ports in application.port, not on"
+                + " infrastructure adapters. UpdateProductUseCase / UpdatePriceUseCase /"
+                + " CreateProductUseCase inject ProductRepository / VariantRepository /"
+                + " OutboxPublisher (all ports), NOT ModulithOutboxWriter or"
+                + " ModulithOutboxPublisher.")
         .check(
             new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)

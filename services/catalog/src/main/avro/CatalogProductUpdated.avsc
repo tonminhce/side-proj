@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "CatalogProductUpdated",
+  "namespace": "vn.vnpt.catalog.domain.event",
+  "doc": "Emitted when a Product aggregate's mutable fields change (Story 1.3 / FR-5).",
+  "fields": [
+    {"name": "productUuid", "type": "long"},
+    {"name": "sku", "type": "string"},
+    {"name": "name", "type": ["null", "string"], "default": null},
+    {"name": "occurredAt", "type": ["null", "string"], "default": null}
+  ]
+}

@@ -1,0 +1,34 @@
+# services/catalog/src/test/resources/application-test.yml — Story 1.1
+# Test profile. The PostgreSQL container is started by CatalogApplicationContextTest
+# (@Testcontainers + @DynamicPropertySource), and the JDBC URL/credentials are wired into the
+# Spring environment at runtime — values here are placeholders that Testcontainers overwrites.
+
+spring:
+  datasource:
+    url: ${TC_POSTGRES_URL}
+    username: ${TC_POSTGRES_USER}
+    password: ${TC_POSTGRES_PASSWORD}
+  flyway:
+    enabled: true               # ensure V001__create_catalog_tables.sql runs in tests too
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Flyway owns schema; JPA validates (no entities yet, but Story 1.2 adds them)
+  main:
+    # Spring Boot 4 disabled bean override by default. util's RedisConfig defines an @Primary
+    # redisTemplate that would otherwise collide with DataRedisAutoConfiguration. Allow override
+    # so util's @Primary wins (intentional library pattern). Same property is set in
+    # main application.yml for parity.
+    allow-bean-definition-overriding: true
+  # util's UtilsAutoConfiguration has a pre-existing bug (FileProperties/FolderProperties/
+  # TelegramProperties are annotated both @Configuration and @ConfigurationProperties, causing
+  # dual-bean registration when @EnableConfigurationProperties is also used). The bug is
+  # out of scope for Story 1.1 (architecture guardrails forbid util edits); util's own tests
+  # verify its full bean wiring. This test only verifies CatalogService's context loads.
+  autoconfigure:
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      # Story 1.3: Modulith bridge's JDBC persistence is excluded in BOTH the main and test
+      # ymls. The bridge is on the classpath only for in-process @ApplicationModuleListener
+      # support; our ModulithOutboxPublisher writes the V001 outbox table directly. See
+      # main application.yml for the rationale.
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration

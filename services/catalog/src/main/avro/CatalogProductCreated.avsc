@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "CatalogProductCreated",
+  "namespace": "vn.vnpt.catalog.domain.event",
+  "doc": "Emitted when a Product aggregate is created (Story 1.3 / FR-5).",
+  "fields": [
+    {"name": "productUuid", "type": "long", "doc": "Snowflake ID of the Product aggregate."},
+    {"name": "sku", "type": "string", "doc": "Product-level SKU slug (NOT a variant SKU)."},
+    {"name": "name", "type": ["null", "string"], "default": null, "doc": "Product display name."},
+    {"name": "occurredAt", "type": ["null", "string"], "default": null, "doc": "ISO-8601 UTC timestamp."}
+  ]
+}

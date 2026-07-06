@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "CatalogProductDeleted",
+  "namespace": "vn.vnpt.catalog.domain.event",
+  "doc": "Emitted when a Product aggregate is soft-deleted (Story 1.3 / FR-5).",
+  "fields": [
+    {"name": "productUuid", "type": "long"},
+    {"name": "sku", "type": "string"},
+    {"name": "occurredAt", "type": ["null", "string"], "default": null}
+  ]
+}

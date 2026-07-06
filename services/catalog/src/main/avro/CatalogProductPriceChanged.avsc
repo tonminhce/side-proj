@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "CatalogProductPriceChanged",
+  "namespace": "vn.vnpt.catalog.domain.event",
+  "doc": "Emitted when a Variant's price changes (Story 1.3 / FR-5).",
+  "fields": [
+    {"name": "variantUuid", "type": "long", "doc": "Snowflake ID of the Variant."},
+    {"name": "productUuid", "type": "long", "doc": "Snowflake ID of the parent Product."},
+    {"name": "oldPriceCents", "type": "long"},
+    {"name": "newPriceCents", "type": "long"},
+    {"name": "currency", "type": ["null", "string"], "default": null},
+    {"name": "occurredAt", "type": ["null", "string"], "default": null}
+  ]
+}

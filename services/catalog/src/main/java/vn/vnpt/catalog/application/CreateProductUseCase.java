@@ -2,6 +2,7 @@ package vn.vnpt.catalog.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,9 +12,9 @@ import vn.vnpt.catalog.domain.Attribute;
 import vn.vnpt.catalog.domain.Product;
 import vn.vnpt.catalog.domain.Variant;
 import vn.vnpt.catalog.domain.event.CatalogProductCreated;
-import vn.vnpt.catalog.infrastructure.repository.AttributeRepository;
-import vn.vnpt.catalog.infrastructure.repository.ProductRepository;
-import vn.vnpt.catalog.infrastructure.repository.VariantRepository;
+import vn.vnpt.catalog.application.port.AttributeRepository;
+import vn.vnpt.catalog.application.port.ProductRepository;
+import vn.vnpt.catalog.application.port.VariantRepository;
 
 /**
  * Application use case: create a {@link Product} aggregate with its first set of variants and
@@ -77,7 +78,13 @@ public class CreateProductUseCase {
         "Product",
         product.getUuid(),
         "catalog.product.created",
-        new CatalogProductCreated(product.getUuid(), product.getSku(), Instant.now()));
+        CatalogProductCreated.newBuilder()
+            .setProductUuid(product.getUuid())
+            .setSku(product.getSku())
+            .setName(product.getName())
+            .setOccurredAt(Instant.now().toString())
+            .build(),
+        Map.of());
 
     if (log.isDebugEnabled()) {
       log.debug(

@@ -42,6 +42,9 @@
         <java.version>25</java.version>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
+        <spring-boot.version>4.0.0</spring-boot.version>
+        <spring-cloud.version>2025.1.0</spring-cloud.version>
+        <spring-modulith.version>2.0.7</spring-modulith.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -79,6 +82,27 @@
     <dependencyManagement>
         <dependencies>
             <!--
+              Spring Boot BOM / Spring Cloud BOM live at the ROOT pom because Maven
+              dependencyManagement is non-transitive — services that depend on util do
+              NOT inherit util's dependencyManagement. util/pom.xml re-imports the same
+              BOMs for its own direct Spring Boot starter deps; service modules pick up
+              the versions from this root block. See architecture-detail.md line 97.
+            -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!--
               ArchUnit — pinned exactly per Story 0.4 / addendum A4 R-09 (Boot 4 ecosystem lag).
               Static analyzer with no Spring runtime dependency, so Boot 4 has no impact.
               Used by util/ archunit tests to enforce Spring Modulith package boundaries.
@@ -88,6 +112,25 @@
                 <artifactId>archunit-junit5</artifactId>
                 <version>1.4.1</version>
                 <scope>test</scope>
+            </dependency>
+            <!--
+              Spring Modulith — pinned at root so services (e.g. services/catalog) inherit
+              a single source of truth. Not in the Spring Boot BOM. Story 1.1 first consumer.
+            -->
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-starter-core</artifactId>
+                <version>${spring-modulith.version}</version>
+            </dependency>
+            <!--
+              Spring Modulith events-jdbc — outbox bridge (Story 1.3 / ADR-01 / ADR-14).
+              Bundles the @ApplicationModuleListener annotation processor and the
+              JdbcOutboxChannel poller. Same version as starter-core; not in Boot BOM.
+            -->
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-events-jdbc</artifactId>
+                <version>${spring-modulith.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

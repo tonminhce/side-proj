@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.catalog.CatalogApplication;
+import vn.vnpt.catalog.application.port.ProductRepository;
 import vn.vnpt.catalog.domain.Product;
 
 /**
