@@ -4,14 +4,62 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
+    <groupId>vn.vnpt</groupId>
     <artifactId>side-project</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>side-project</name>
+    <description>Multi-module monorepo parent (see architecture.md §Project Structure &amp; Boundaries)</description>
+
+    <!-- ponytail: BOMs (Spring Boot 4.0.0 + Spring Cloud 2025.1.0) intentionally NOT imported here.
+         util/pom.xml owns them so every downstream service inherits transitively without duplication.
+         See architecture-detail.md §Detail: ADR-01 line 97. -->
+
+    <modules>
+        <module>util</module>
+        <!-- Services (14) -->
+        <module>services/catalog</module>
+        <module>services/inventory</module>
+        <module>services/cart</module>
+        <module>services/checkout</module>
+        <module>services/payment</module>
+        <module>services/order</module>
+        <module>services/fulfillment</module>
+        <module>services/returns</module>
+        <module>services/customer</module>
+        <module>services/search</module>
+        <module>services/notification</module>
+        <module>services/admin</module>
+        <module>services/pricing</module>
+        <module>services/invoice</module>
+        <!-- BFFs (2) -->
+        <module>bff/storefront-bff</module>
+        <module>bff/admin-bff</module>
+    </modules>
 
     <properties>
+        <java.version>25</java.version>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.14.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>4.0.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 
 </project>
