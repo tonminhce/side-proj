@@ -187,7 +187,16 @@ If you've been spawned to **continue the BMad pipeline**:
 
 ---
 
-## 9. Hard rules — DO NOT VIOLATE
+## 9. Hard rules — DO NOT VIOLATE (see also `HARD-RULES.md`)
+
+For the **full consolidated hard rules** (4 absolute-most-critical + 13 categories including Security, Idempotency, PCI-DSS, VN Compliance, Code Style, A11y, Feature Flags, etc.), see **`HARD-RULES.md`**. The 4 absolute-most-critical (NEVER violate):
+
+1. **NEVER log a PAN** (Primary Account Number) or any card-shaped field (`\d{13,19}`). R-15.
+2. **NEVER store a PAN in any database column.** R-15.
+3. **NEVER commit `.env` files or hardcode secrets.** All secrets in HashiCorp Vault. ADR-18.
+4. **NEVER use a per-retry Stripe idempotency key.** Use stable `sha256(order_id + ":" + saga_step_name)`. ADR-11, mitigates DI-02.
+
+Additionally, BMad workflow rules:
 
 1. **Don't split** a workflow into multiple files. One workflow = one canonical file (+ companion if warranted).
 2. **Don't create** files in `prds/prd-.../` except for the canonical PRD family (prd.md, addendum.md, .decision-log.md). Architecture / epics belong in `planning-artifacts/` flat.
@@ -197,6 +206,8 @@ If you've been spawned to **continue the BMad pipeline**:
 6. **Don't use Debezium** — out of scope per ADR-14 (Modulith outbox bridge covers this).
 7. **Vietnamese-first is non-negotiable** — locale formatting, diacritic search, tax-invoice all bind per PRD.
 8. **Card-testing / PCI scope**: never log PAN; never enable default request-body logger.
+
+For the full list (~83 hard rules), see `HARD-RULES.md`.
 
 ---
 
@@ -217,14 +228,126 @@ grep -A 5 "^### Detail: ADR-20" _bmad-output/planning-artifacts/architecture-det
 
 # See full risk register
 grep -E "^\| (R|DI|AT|LC|OP)" _bmad-output/planning-artifacts/addendum.md
+
+# Find a hard rule
+grep -B 1 "NEVER" _bmad-output/HARD-RULES.md
 ```
 
 ---
 
-## 11. Last update
+## 11. Quickref index (41 quickref + onboarding docs)
+
+All 41 quickref docs in `_bmad-output/`. Use this index to find the right doc for your role.
+
+### Entry point (3)
+
+| Doc | When to read |
+|---|---|
+| **`AGENT-ONBOARDING.md`** (this file) | First-time setup, full state |
+| **`LOCAL-DEV-SETUP-CHECKLIST.md`** | 30-min dev platform setup |
+| **`GLOSSARY.md`** | Acronyms + terms (200+) |
+
+### Hard rules (1)
+
+| Doc | When to read |
+|---|---|
+| **`HARD-RULES.md`** | 100% non-negotiable rules (consolidated from all docs) |
+
+### Architecture (5)
+
+| Doc | When to read |
+|---|---|
+| **`ADR-INDEX.md`** | 26 ADRs 1-paragraph each |
+| **`ARCHITECTURE-QUICKREF.md`** | 1-page digest |
+| **`ARCHITECTURE-DIAGRAMS.md`** | C4 + sequence + state machine (Mermaid) |
+| **`DECISION-LOG-CHEATSHEET.md`** | How to add/update ADRs |
+| **`PROBLEM-DOMAINS-MAP.md`** | 14 services + events + boundaries |
+
+### Domain (4)
+
+| Doc | When to read |
+|---|---|
+| **`API-CONTRACT.md`** | REST endpoints per service |
+| **`DATA-MODEL.md`** | ERD + per-service schema |
+| **`SECURITY-MODEL.md`** | Trust boundaries + auth + PCI |
+| **`COMPLIANCE-VN.md`** | VN-specific compliance deep-dive |
+
+### Risk + observability (3)
+
+| Doc | When to read |
+|---|---|
+| **`RISK-REGISTER.md`** | 15 risks with mitigations |
+| **`OBSERVABILITY-RUNBOOK.md`** | OTel + LGTM + chaos |
+| **`ALERTING-RUNBOOK.md`** | Per-alert playbooks |
+
+### Dev / QA / Ops / Frontend (10)
+
+| Doc | When to read |
+|---|---|
+| **`SPRINT-0-ONBOARDING.md`** | Sprint 0 day-1 (R-01 fix) |
+| **`SPRINT-1-DEV-HANDBOOK.md`** | Sprint 1 step-by-step |
+| **`EPIC-1-STORIES-QUICKREF.md`** | Per-story cards |
+| **`INTEGRATION-TEST-CHEATSHEET.md`** | Testcontainers + JUnit |
+| **`FRONTEND-HANDBOOK.md`** | Next.js 15 |
+| **`DEVOPS-RUNBOOK.md`** | Local + K8s + Vault |
+| **`QA-AGENT-HANDBOOK.md`** | Chaos + e2e + regression |
+| **`CONTRIBUTING.md`** | PR conventions + CI |
+| **`CACHING-STRATEGY.md`** | Redis patterns + key naming |
+| **`TEST-DATA-MANAGEMENT.md`** | Factory pattern + NO PII + Vietnamese data |
+
+### Last BMad step (1)
+
+| Doc | When to read |
+|---|---|
+| **`STORY-AUTOMATOR-CHEATSHEET.md`** | How to invoke bmad-story-automator (last BMad step) |
+
+### Governance (3)
+
+| Doc | When to read |
+|---|---|
+| **`REVIEWER-GUIDE.md`** | Senior dev code review |
+| **`FEATURE-FLAGS.md`** | Flag policy + kill switch |
+| **`CONVENTIONS.md`** | Naming + style + anti-patterns (consolidated) |
+
+### Release / Incident (3)
+
+| Doc | When to read |
+|---|---|
+| **`RELEASE-PROCESS.md`** | v1.0 launch procedure + rollback |
+| **`BUG-TRIAGE.md`** | Post-launch incident handling |
+| **`COMPLIANCE-AUDIT-CHECKLIST.md`** | Pre-launch audit (PCI + PDPD + VN tax) |
+
+### Ops / SRE (3)
+
+| Doc | When to read |
+|---|---|
+| **`CAPACITY-PLANNING.md`** | 50k → 500k orders/day scale plan |
+| **`DISASTER-RECOVERY.md`** | 10 disaster scenarios + RTO/RPO |
+| **`ON-CALL-ROSTER.md`** | Rotation + escalation + handoff |
+
+### Infrastructure (3)
+
+| Doc | When to read |
+|---|---|
+| **`KAFKA-TOPIC-LIFECYCLE.md`** | Add/evolve/retire topics + Avro compat |
+| **`METRICS-DICTIONARY.md`** | 50+ per-metric reference |
+| **`A11Y-CHECKLIST.md`** | WCAG 2.1 AA + per-component |
+
+### Meta (2)
+
+| Doc | When to read |
+|---|---|
+| **`AGENT-INTERACTION.md`** | Multi-agent collaboration + handoff patterns |
+| **`CHANGELOG.md`** | Keep-a-Changelog format + conventional commits |
+
+### Total: 41 quickref + onboarding docs (~17,500 lines / ~78K words)
+
+---
+
+## 12. Last update
 
 - **Date:** 2026-07-06
-- **Status:** All 7 BMad planning artifacts at 10/10 quality; Sprint 0 ready to start.
+- **Status:** All 7 BMad planning artifacts at 10/10 quality; 41 quickref docs covering every persona + topic; Sprint 0 ready to start.
 - **Next BMad step:** `bmad-story-automator` (the only remaining step in the pipeline).
 - **Sprint 0 critical path:** Story 0.1 (fix util/ parent pom — R-01) is the only true blocker for everything else.
 
