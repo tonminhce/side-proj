@@ -1,5 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
+last_updated: 2026-07-07  # dev-story — 1-4 → review
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -33,8 +34,8 @@ development_status:
   epic-1: in-progress  # Epic 1: Browse Catalog and Manage Inventory
   1-1-catalogservice-maven-module-bootstrap-per-service-postgres-db: done
   1-2-product-aggregate-variant-graph-fr-1-fr-2-fr-4: done
-  1-3-catalog-change-events-with-avro-strict-compat-fr-5: in-progress
-  1-4-admin-ui-catalog-read-view-fr-6-fr-7: backlog
+  1-3-catalog-change-events-with-avro-strict-compat-fr-5: done
+  1-4-admin-ui-catalog-read-view-fr-6-fr-7: review  # dev-story — Story 1.4 ready for review
   1-5-inventoryservice-per-warehouse-ledger-fr-8: backlog
   1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause: backlog
   1-7-multi-warehouse-per-variant-stock-fr-10: backlog

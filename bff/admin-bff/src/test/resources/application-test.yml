@@ -1,0 +1,17 @@
+# bff/admin-bff/src/test/resources/application-test.yml — Story 1.4 test profile.
+# The BFF is a stateless forward-proxy — no DataSource, no JPA, no Flyway. util pulls these
+# autoconfigs in via the util dependency; the catalog dep drags in Modulith's JDBC bridge
+# autoconfig too. We exclude all of them here so the BFF context can boot.
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+      - vn.vnpt.util.UtilsAutoConfiguration
+
+services:
+  catalog:
+    base-url: http://localhost:8081

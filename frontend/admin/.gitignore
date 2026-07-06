@@ -1,0 +1,15 @@
+# Next.js
+.next/
+out/
+
+# deps
+node_modules/
+
+# vitest
+coverage/
+
+# tsc
+*.tsbuildinfo
+
+# env
+.env*.local

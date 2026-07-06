@@ -1,0 +1,8 @@
+# bff/admin-bff/src/main/resources/application-prod.yml — Story 1.4
+# Production profile: DevRolesHeaderFilter is excluded via @Profile({"dev","test"}) on the
+# bean. Production security is JWT-only once Story 5.5 lands.
+
+# ponytail: DevRolesHeaderFilter's @Profile("!prod") already prevents it from registering
+# in prod. The placeholder security config (Story 5.5) replaces DevRolesHeaderFilter entirely
+# in prod. This yml is intentionally minimal — future stories add tracing exporters,
+# Vault-backed JWT signing keys, etc.

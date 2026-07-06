@@ -12,5 +12,125 @@
     </parent>
 
     <artifactId>admin-bff</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
+
+    <name>admin-bff</name>
+    <description>Staff-facing BFF — proxies /bff/admin/* to backend services with RBAC gating (Story 1.4 / FR-74).</description>
+
+    <dependencies>
+        <!--
+          util: brings BOMs (Spring Boot 4.0.0, Spring Cloud 2025.1.0) transitively.
+          Story 5.5 wires util's CustomSecurityExpressionHandler; for now we reuse only the BOM
+          inheritance (no util class is referenced at runtime in v1).
+        -->
+        <dependency>
+            <groupId>vn.vnpt</groupId>
+            <artifactId>util</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+        <!--
+          services/catalog: provides ProductSummary / VariantSummary DTOs (Story 1.4 / FR-6).
+          The BFF deserializes the catalog's response into these DTOs via
+          ParameterizedTypeReference<Page<ProductSummary>>. The BFF is therefore LEGITIMATELY
+          allowed to depend on the catalog's application.query.. package — see
+          AdminBffPackageBoundaryTest's exclude rule (Task 5.7). The BFF must NOT depend on
+          catalog's infrastructure.. classes (the HTTP boundary is the contract).
+        -->
+        <dependency>
+            <groupId>vn.vnpt</groupId>
+            <artifactId>catalog</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!--
+          spring-boot-starter-web: Boot 4 splits webflux out of web; the BFF uses servlet
+          blocking MVC (we block() on WebClient downcalls — see AdminCatalogController).
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+          spring-boot-starter-security: required for SecurityContextHolder and the
+          @PreAuthorize surface; Story 1.4 doesn't @PreAuthorize anything (RBAC lives in the
+          role enforcer below) but the chain must register for SecurityContextHolder to wire.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!--
+          spring-boot-starter-webflux: brings WebClient (Boot 4 ships WebClient under webflux,
+          not web). The BFF uses WebClient to call the catalog service — REST template is
+          deprecated in Boot 4 and RestClient is the alternative; WebClient is the canonical
+          reactive client and simpler to reason about for a stateless forward-proxy.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- Actuator: /actuator/health for the dev-compose smoke script. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ponytail: util/pom.xml declares Lombok as <optional>true</optional>, so it does NOT
+             propagate transitively to consumers. Story 1.4 is the first admin-bff file that
+             uses Lombok annotations (@RequiredArgsConstructor) — declare Lombok directly here. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.42</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Test scope -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
+                <configuration>
+                    <release>25</release>
+                    <!-- -parameters: see services/catalog/pom.xml for the same rationale. -->
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.42</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>4.0.0</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

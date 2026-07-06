@@ -34,9 +34,17 @@ report() {
 
 # 1. Postgres (AC #12: SELECT 1 — proves the query engine is up, not just the port)
 if dc exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-app}" -tAc "SELECT 1" 2>/dev/null | grep -q '^1$'; then
-  report 0 "postgres: SELECT 1"
+  report 0 "postgres: SELECT 1 (${POSTGRES_DB:-app})"
 else
-  report 1 "postgres: SELECT 1"
+  report 1 "postgres: SELECT 1 (${POSTGRES_DB:-app})"
+fi
+
+# 1b. Postgres per-service DBs (Story 1.1: catalog_db). One Postgres pass per existing service DB —
+#     each per-service check verifies the role can connect and run a trivial query.
+if dc exec -T postgres psql -U "${POSTGRES_CATALOG_USER:-catalog_user}" -d "${POSTGRES_CATALOG_DB:-catalog_db}" -tAc "SELECT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: SELECT 1 (${POSTGRES_CATALOG_DB:-catalog_db})"
+else
+  report 1 "postgres: SELECT 1 (${POSTGRES_CATALOG_DB:-catalog_db})"
 fi
 
 # 2. Kafka
@@ -80,6 +88,11 @@ if curl -sf http://localhost:8181/health >/dev/null 2>&1; then
 else
   report 1 "opa: GET /health"
 fi
+
+# 8. Story 1.4: admin read view boots (manual OTel + browser-check).
+#    Skipped here — the BFF and catalog service are application services that ship with their
+#    Epic stories; smoke.sh only checks platform infra (Postgres + Kafka + ES + Redis + Apicurio
+#    + MinIO + OPA). Verify the admin path manually with the curl in dev/README.md "Read admin view".
 
 total=$((pass + fail))
 printf '\n%d/%d services healthy.\n' "$pass" "$total"

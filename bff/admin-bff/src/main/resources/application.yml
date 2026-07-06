@@ -1,0 +1,27 @@
+# bff/admin-bff/src/main/resources/application.yml — Story 1.4
+# Default profile is `dev` (DevRolesHeaderFilter is active). Production overrides via env or
+# `-Dspring.profiles.active=prod`.
+
+server:
+  port: 8082   # Admin BFF: 8082. Storefront is 8080; catalog service is 8081.
+
+spring:
+  application:
+    name: admin-bff
+
+  main:
+    # Spring Boot 4 disabled bean override by default. util's library beans (e.g. @Primary
+    # redisTemplate) intentionally override Boot's autoconfig; allow it. Same property is set
+    # on services/catalog for parity.
+    allow-bean-definition-overriding: true
+
+services:
+  catalog:
+    # Catalog service base URL. Override via env CATALOG_SERVICE_URL in dev/prod.
+    base-url: ${CATALOG_SERVICE_URL:http://localhost:8081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

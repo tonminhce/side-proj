@@ -8,7 +8,8 @@ Expected time-to-healthy: **~60 s** on a warm cache.
 
 | Service        | Host port | Notes                                                    |
 |----------------|-----------|----------------------------------------------------------|
-| Postgres       | `5432`    | user `postgres`, db `app`, pwd `postgres` (dev only)      |
+| Postgres       | `5432`    | superuser `postgres`, db `app`, pwd `postgres` (dev only) |
+| Postgres `catalog_db` | `5432` | per-service DB for CatalogService (Story 1.1) — user `catalog_user` / pwd `catalog_pass`; JDBC `jdbc:postgresql://localhost:5432/catalog_db` |
 | Kafka          | `9092`    | KRaft, single-node, internal listeners + PLAINTEXT host  |
 | Elasticsearch  | `9200`    | single-node (8.15.0); Vietnamese analyzer is application-layer (Story 6.2) |
 | Redis          | `6379`    | `maxmemory-policy allkeys-lru`                           |
@@ -62,6 +63,35 @@ docker compose -f dev/docker-compose.yml restart <service>     # restart without
 ```
 
 A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthcheck absorbs this via `start_period: 30s`. If `kafka` shows `health: starting`, give it another 20–30 s.
+
+## Per-service databases (ADR-03)
+
+`dev/postgres-init/` runs once on first Postgres start (when `pg-data` is empty). It creates the role + database for each service that has shipped its bootstrap story:
+
+- `catalog_db` (Story 1.1) — owner `catalog_user` / pwd `catalog_pass`.
+
+On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
+
+## Read admin view (Story 1.4 / FR-6)
+
+The admin catalog read view is a 3-tier path: `frontend/admin/` (Next.js 15) → `bff/admin-bff/` (Spring Boot 4 proxy on `:8082`) → `services/catalog/` (data on `:8081`).
+
+Bring it up:
+
+```bash
+# 1. catalog service (Spring Boot jar — built from services/catalog/target/)
+java -jar services/catalog/target/catalog-1.0-SNAPSHOT.jar
+
+# 2. admin-bff (Spring Boot jar — built from bff/admin-bff/target/)
+java -jar bff/admin-bff/target/admin-bff-1.0-SNAPSHOT.jar
+
+# 3. admin frontend
+cd frontend/admin && npm run dev   # http://localhost:3001/admin/catalog
+```
+
+Browser smoke: `curl -H "X-User-Roles: staff" http://localhost:8082/bff/admin/catalog/products?page=0&size=20` should return `200 OK` with a `content` array.
+
+The `X-User-Roles` header is the **dev/test placeholder** (Story 5.5 replaces it with util's `CustomSecurityExpressionHandler` reading JWT roles). Production deploys MUST NOT have the header — `@Profile({"dev","test"})` on `DevRolesHeaderFilter` excludes the bean in the `prod` profile.
 
 ## What this file does NOT contain
 
