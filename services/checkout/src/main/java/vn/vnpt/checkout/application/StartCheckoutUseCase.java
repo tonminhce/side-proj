@@ -11,7 +11,6 @@ import vn.vnpt.checkout.domain.CheckoutStatus;
 import vn.vnpt.checkout.domain.snapshot.CartLineSnapshot;
 import vn.vnpt.checkout.infrastructure.outbox.CheckoutEventPublisher;
 import vn.vnpt.checkout.infrastructure.repository.CheckoutRepository;
-import vn.vnpt.util.common.SnowflakeIdGenerator;
 
 /** Story 2.3 / FR-19 (single-page checkout API); Story 2.4 / FR-20 owns the Stripe PaymentIntent. */
 @Service
@@ -20,7 +19,7 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
 @Slf4j
 public class StartCheckoutUseCase {
 
-  /** ADR-11 saga-step tag — appended to the checkoutUuid to derive the idempotency key. */
+  /** ADR-11 saga-step tag — paired with the stable cartUuid to derive the idempotency key. */
   static final String STRIPE_PAYMENT_INTENT_STEP = "stripe.payment_intent.create";
 
   private final CheckoutRepository checkoutRepository;
@@ -36,14 +35,16 @@ public class StartCheckoutUseCase {
     long amountMinor = computeAmountMinor(request.getCartLines());
     String currency = resolveCurrency(request.getCurrency());
 
-    // Pre-generate the Snowflake ID so the Stripe idempotency key matches the persisted checkout
-    // UUID (AC #4: key = (checkoutUuid, "stripe.payment_intent.create")). Pre-assigning the UUID
-    // lets merge() no-op the SELECT-then-INSERT round-trip — @PrePersist keeps our value.
-    Long checkoutUuid = SnowflakeIdGenerator.generateId();
-    String idempotencyKey = checkoutUuid + ":" + STRIPE_PAYMENT_INTENT_STEP;
+    // AC #4 — idempotency key must be STABLE across retries of the same logical checkout.
+    // (cartUuid, saga_step_name) per ADR-11: same cartUuid → same key → Stripe returns the
+    // existing PaymentIntent instead of creating a duplicate.
+    String idempotencyKey = request.getCartUuid() + ":" + STRIPE_PAYMENT_INTENT_STEP;
     StripePaymentGateway.Result stripeResult =
         stripePaymentGateway.createPaymentIntent(amountMinor, currency, idempotencyKey);
 
+    // version=null here so Spring Data JPA 4 routes save() through persist() (its
+    // JpaMetamodelEntityInformation.isNew() inspects the @Version field — null = new).
+    // BaseEntity.@PrePersist assigns the Snowflake uuid + createdAt + version=0.
     Checkout checkout =
         Checkout.builder()
             .tenantId("default")
@@ -51,14 +52,10 @@ public class StartCheckoutUseCase {
             .userId(request.getUserId())
             .guestCartId(request.getGuestCartId())
             .status(CheckoutStatus.PAYMENT_PENDING)
-            .version(0L)
             .stripeClientSecret(stripeResult.clientSecret())
             .paymentIntentId(stripeResult.paymentIntentId())
             .shippingAddress(request.getShippingAddress())
             .build();
-    // Pre-assign the Snowflake ID so the Stripe idempotency key matches the persisted UUID.
-    // Lombok's @Builder does not expose superclass fields, so we use the setter.
-    checkout.setUuid(checkoutUuid);
 
     Checkout persisted = checkoutRepository.save(checkout);
 

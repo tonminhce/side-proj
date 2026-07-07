@@ -109,16 +109,47 @@ class StartCheckoutUseCaseTest {
         .createPaymentIntent(amountCaptor.capture(), eq("vnd"), anyString());
     assertThat(amountCaptor.getValue()).isEqualTo(100_000L);
 
-    // Story 2.4 / FR-20 / AC #4 — idempotency key = (checkoutUuid, "stripe.payment_intent.create")
-    // (ADR-11 / NFR-IDEM-2). The use case pre-generates the Snowflake ID so the Stripe key MATCHES
-    // the persisted checkoutUuid — retries of the same logical checkout reuse the same PaymentIntent.
-    ArgumentCaptor<Checkout> savedCaptor = ArgumentCaptor.forClass(Checkout.class);
-    verify(checkoutRepository).save(savedCaptor.capture());
+    // Story 2.4 / FR-20 / AC #4 — idempotency key = (cartUuid, "stripe.payment_intent.create")
+    // (ADR-11 / NFR-IDEM-2). The key is derived from the STABLE cartUuid so retries of the same
+    // logical checkout reuse the same PaymentIntent — not from the freshly-generated Snowflake
+    // checkout uuid (which would change per call and create duplicates).
     ArgumentCaptor<String> idemCaptor = ArgumentCaptor.forClass(String.class);
     verify(stripePaymentGateway)
         .createPaymentIntent(anyLong(), anyString(), idemCaptor.capture());
-    assertThat(idemCaptor.getValue()).isEqualTo(savedCaptor.getValue().getUuid() + ":stripe.payment_intent.create");
-    assertThat(idemCaptor.getValue()).matches("\\d+:stripe\\.payment_intent\\.create");
+    assertThat(idemCaptor.getValue()).isEqualTo("12345:stripe.payment_intent.create");
+  }
+
+  /**
+   * AC #4 regression — calling {@code start()} twice with the SAME {@code cartUuid} MUST derive the
+   * SAME Stripe idempotency key. Locks in NFR-IDEM-2: Stripe returns the existing PaymentIntent,
+   * never a duplicate. (Pre-C2-fix the key was derived from the freshly-generated Snowflake uuid,
+   * so each call got a different key and a new PaymentIntent was created on retry.)
+   */
+  @Test
+  void start_repeatedCallWithSameCartUuid_derivesSameIdempotencyKey() {
+    injectCurrencyDefault("VND");
+    when(stripePaymentGateway.createPaymentIntent(anyLong(), eq("vnd"), anyString()))
+        .thenReturn(new StripePaymentGateway.Result(PI_ID, PI_SECRET));
+    when(checkoutRepository.save(any(Checkout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    StartCheckoutRequest request =
+        StartCheckoutRequest.builder()
+            .cartUuid(77777L)
+            .userId("u-abc-123")
+            .shippingAddress(address())
+            .cartLines(cartLines())
+            .build();
+
+    useCase.start(request);
+    useCase.start(request);
+
+    ArgumentCaptor<String> idemCaptor = ArgumentCaptor.forClass(String.class);
+    verify(stripePaymentGateway, org.mockito.Mockito.times(2))
+        .createPaymentIntent(anyLong(), anyString(), idemCaptor.capture());
+    List<String> keys = idemCaptor.getAllValues();
+    assertThat(keys).hasSize(2);
+    assertThat(keys.get(0)).isEqualTo("77777:stripe.payment_intent.create");
+    assertThat(keys.get(1)).isEqualTo("77777:stripe.payment_intent.create");
   }
 
   @Test

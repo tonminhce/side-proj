@@ -17,8 +17,8 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import vn.vnpt.util.common.constant.ErrorCodeEnum;
 
 @RestControllerAdvice
-public class GlobalExceptionHandler {
-  private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+public class UtilGlobalExceptionHandler {
+  private final Logger log = LoggerFactory.getLogger(UtilGlobalExceptionHandler.class);
 
   @ExceptionHandler(CustomException.class)
   public ResponseEntity<ReturnResult> ahandleException(Exception ex) {
