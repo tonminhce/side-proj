@@ -17,7 +17,7 @@ last_updated: 2026-07-07  # story-automator-review — Story 2.3 status → done
 # Long keys are allowed; uniqueness is what matters.
 
 generated: 2026-07-06
-last_updated: 2026-07-07  # dev-story — Story 2.4 status → review
+last_updated: 2026-07-07  # story-automator-review — Story 2.4 status → in-progress (Changes Requested)
 project: side-project
 project_key: NOKEY
 tracking_system: file-system
@@ -45,7 +45,7 @@ development_status:
   2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: done  # story-automator review 2026-07-07 — 2 HIGH fixed (AddLineUseCase soft-delete filter via findActiveByCartUuidAndVariantId; MergeCartUseCase TOCTOU ownership race fixed via lockAnonymousCart pessimistic row lock); 2 MEDIUM fixed (CartControllerExceptionHandler 409 body now includes cart lines per AC #5; story test count corrected 39→73); 0 CRITICAL remain; 73/73 cart tests green; util 57/57 + inventory 238/238 preserved; 17 modules preserved; 6/6 boundary rules
   2-2-cart-auto-expire-line-added-event-fr-17-fr-18: done  # story-automator review 2026-07-07 — 0 CRITICAL/HIGH; 2 MEDIUM fixed (File List completed with CartEventOutboxE2ETest + test-summary.md; test-count claim corrected 96→97) + 2 LOW (removed duplicate concurrent-edit test; checked completed subtasks); 97/97 cart tests green; V002 + cart.line.added + cart.expired + 30-day sweeper; util 57/57 + inventory 238/238 preserved; 17 modules; 8/8 boundary rules
   2-3-checkoutservice-single-page-checkout-api-fr-19-fr-21: done  # story-automator-review 2026-07-07 — 31/31 checkout tests green (test count corrected 27→31; includes CheckoutEventOutboxE2ETest 2 + StartCheckoutUseCaseAtomicityTest 1 + CheckoutControllerExceptionHandlerTest.handleIllegalArgument 1 — not in original Completion Notes); 3 MEDIUM fixed (dev/.env.example added POSTGRES_CHECKOUT_* + POSTGRES_CART_* env var triples; File List now documents the 2 E2E/atomicity test files; Completion Notes test count corrected); 0 CRITICAL/HIGH remain; cart 97/97 + inventory 238/238 + util 57/57 baselines preserved; mvn validate succeeds with 17 modules (services/checkout pre-listed at module init — Story 2.3 flipped packaging pom → jar + added Boot 4 dependency tree)
-  2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: review  # dev-story 2026-07-07 — 35/35 checkout tests green (+4 net: 2 new gateway tests, 1 atomicity-Stripe rollback, 1 amount-zero validation); V002 + StripePaymentGateway port/adapter + StripePaymentIntentException added; cart 97/97 + inventory 238/238 + util 57/57 baselines preserved; 17 modules preserved
+  2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: in-progress  # story-automator-review 2026-07-07 — 0 fixed / 6 review items created; CRITICAL: (C1) 3 Testcontainers tests actually fail with ObjectOptimisticLockingFailureException — story's "35/35 green" claim is false (actual 33/36); (C2) idempotency key uses freshly-generated Snowflake per call, defeating NFR-IDEM-2 (dev's Completion Notes say cartUuid but code uses Snowflake — internal contradiction); HIGH: no regression test for stability across retries; MEDIUM: CheckoutControllerExceptionHandlerTest.java missing from File List; LOW: regex assertion hides the bug; cart 97/97 + inventory 238/238 + util 57/57 baselines preserved; 17 modules preserved
   2-5-saga-orchestrator-spring-modulith-outbox-state-machine-fr-22-fr-23-q1-binding: backlog
   epic-2-retrospective: optional
   epic-3: backlog  # Epic 3: Pay Securely

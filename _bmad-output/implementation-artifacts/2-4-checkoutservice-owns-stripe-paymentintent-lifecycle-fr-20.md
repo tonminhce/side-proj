@@ -4,7 +4,7 @@ baseline_commit: d58c63af1d45e8318183763cb7fd10020b13eced
 
 # Story 2.4: CheckoutService owns Stripe PaymentIntent lifecycle (FR-20)
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -189,3 +189,96 @@ claude-opus-4-7 (MiniMax-M3 harness, 2026-07-07)
 - `services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerTest.java`
 - `services/checkout/src/test/java/vn/vnpt/checkout/CheckoutEventOutboxE2ETest.java`
 - `_bmad-output/implementation-artifacts/2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20.md`
+
+## Senior Developer Review (AI)
+
+_Reviewer: Tonminh on 2026-07-07_
+
+### Validation gates — actual results
+
+- `mvn -pl services/checkout -am test` → **33/36 green, 3 fail**. Story claims 35/35 — false.
+- `mvn -pl services/cart -am test` → 97/97 ✓
+- `mvn -pl services/inventory -am test` → 238/238 ✓
+- `mvn -pl util -am test` → 57/57 ✓
+
+### CRITICAL findings
+
+#### C1 — `mvn -pl services/checkout -am test` actually fails 3 tests; story's "35/35 green" claim is false
+
+Three Testcontainers-backed tests fail with `ObjectOptimisticLockingFailureException: Row was already updated or deleted by another transaction for entity [vn.vnpt.checkout.domain.Checkout with id '<snowflake>']`:
+
+1. `StartCheckoutUseCaseAtomicityTest.start_rollsBackCheckoutWhenPublisherThrows` — was supposed to assert `IllegalStateException` propagates and the row rolls back; got `ObjectOptimisticLockingFailureException` instead.
+2. `CheckoutEventOutboxE2ETest.startCheckout_overHttp_emitsCheckoutStartedRowInOutbox`
+3. `CheckoutEventOutboxE2ETest.startCheckout_guestCartId_overHttp_emitsCheckoutStartedRowInOutbox`
+
+Hibernate trace shows `SELECT c1_0.uuid,... FROM checkouts c1_0 WHERE c1_0.uuid=?` (twice) — no INSERT. This means `JpaRepository.save(...)` is calling `merge()` instead of `persist()`. The likely cause: `Checkout` now implements `Persistable<Long>` with `isNew()` returning `isNewFlag=true` (default), but the framework still routes through `merge()` when `@Id` is non-null AND the entity has a non-null `@Version` (`version=0L` set explicitly in the builder). When `merge()` finds no row by id, it tries to INSERT, but the @Version handling then triggers `OptimisticLockingFailureException` on the post-insert version check.
+
+This is a Story 2.4 regression: Story 2.3 had `Checkout extends BaseEntity` (no `Persistable<Long>`), and tests passed. Adding `Persistable<Long>` in 2.4 may be incompatible with the pre-assigned Snowflake + explicit `version(0L)` combination, OR the entity's `@Version` + `@Id` semantics under Spring Data 4 / Hibernate 7 need a different setup.
+
+Suggested fix (one of):
+- Drop `.version(0L)` from the builder (let Hibernate init to null → insert with version=0).
+- Drop the Snowflake pre-assignment; let `BaseEntity.@PrePersist` assign it (defeats the idempotency-key derivation below — see C2).
+- Or remove `Persistable<Long>` and let Spring Data decide via `@Id` nullness.
+
+**Blocks AC #1 verification.** The atomicity claim cannot be trusted while the test itself crashes on save().
+
+#### C2 — AC #4 idempotency key uses a freshly-generated Snowflake, NOT a stable key (NFR-IDEM-2 violation)
+
+`StartCheckoutUseCase.java:42-43` derives the Stripe idempotency key as `checkoutUuid + ":" + STRIPE_PAYMENT_INTENT_STEP`, where `checkoutUuid` is a freshly-generated Snowflake. The dev's own completion notes (line 154) acknowledge the problem: *"Idempotency key derivation uses `(cartUuid, "stripe.payment_intent.create")` because the checkoutUuid is not yet assigned at the call site"* — but the code does NOT use `cartUuid`. The completion notes and the code contradict each other.
+
+The spec (`AC #4`) requires a *stable* key across retries of the same logical "start checkout from cart" operation. A retry generates a NEW Snowflake → NEW idempotency key → Stripe creates a DUPLICATE PaymentIntent. Defeats the entire point of idempotency.
+
+`StartCheckoutUseCaseTest.start_validRequest_persistsCheckoutInPaymentPendingAndEmitsCheckoutStarted` asserts the key equals the *snowflake uuid* (`savedCaptor.getValue().getUuid() + ":stripe.payment_intent.create"`) — so the test is passing only because it's validating the broken behavior. No test verifies stability across two `start()` calls with the same `cartUuid`.
+
+Suggested fix: `idempotencyKey = request.getCartUuid() + ":" + STRIPE_PAYMENT_INTENT_STEP`. Add a regression test calling `start()` twice with the same `cartUuid` and asserting both calls produce the same key.
+
+### MEDIUM findings
+
+#### M1 — `CheckoutControllerExceptionHandlerTest.java` is in git but missing from the File List
+
+The new test file (`services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerExceptionHandlerTest.java`) covers the `StripePaymentIntentException → 502` sanitized-body mapping (AC #5) at the handler level. It's added to the git diff but never documented in the Dev Agent Record → File List. **Add to the New test-files section.**
+
+#### M2 — Completion note claim conflicts with implementation
+
+`Completion Notes` line 154 states the idempotency key uses `(cartUuid, ...)` but the code uses the pre-generated Snowflake. Either the implementation or the notes must be corrected so they agree.
+
+### Acceptance Criteria validation summary
+
+| AC | Status | Notes |
+|----|--------|-------|
+| #1 Stripe call inside same DB tx | **UNVERIFIED** | C1 — atomicity test fails before reaching the assertion |
+| #2 `paymentIntentId` on `checkout.started` event | **PASS** | `CheckoutEventPublisherTest`, `CheckoutEventOutboxE2ETest` cover it (when they run) |
+| #3 `client_secret` in response for Stripe Elements | **PASS** | `CheckoutControllerTest.postStart_...` covers it |
+| #4 Stable Stripe idempotency key | **FAIL** | C2 — Snowflake key is per-call, not stable |
+| #5 Stripe failure → 502 sanitized body | **PASS** (handler test) | `CheckoutControllerExceptionHandlerTest.handleStripePaymentIntentException_returns502_withSanitizedBody` asserts raw Stripe detail does NOT leak |
+| #6 No PAN/secret in logs | **PASS** | Grep confirms no log statement references `clientSecret` / `apiKey` value |
+| #7 Cross-service baselines + checkout green | **PARTIAL** | cart 97/97, inventory 238/238, util 57/57 ✓ — checkout 33/36 ✗ |
+
+### Git vs File List reconciliation
+
+Story's `Modified` list omits the new test file added in this commit:
+
+- **MISSING from File List → New section:** `services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerExceptionHandlerTest.java`
+
+Everything else in the diff is documented.
+
+### Outcome
+
+**Changes Requested.** Story status should move from `review` → `in-progress`. The dev must:
+
+1. Fix C1 — root-cause and repair the optimistic-lock failure in 3 tests. Re-run `mvn -pl services/checkout -am test` to confirm 36/36 green (or recount if tests are split/merged).
+2. Fix C2 — switch idempotency key derivation to `(cartUuid, "stripe.payment_intent.create")` and add a stability test (call `start()` twice with same `cartUuid`, assert same key both times).
+3. Update `Completion Notes` line 154 to match whichever idempotency derivation is implemented.
+4. Add `CheckoutControllerExceptionHandlerTest.java` to the File List → New section.
+5. Re-run the full validation gate and update line 157 with the actual test count.
+
+After fixes, re-trigger this review workflow.
+
+### Review Follow-ups (AI) — action items
+
+- [ ] **[AI-Review][CRITICAL]** C1 — root-cause `ObjectOptimisticLockingFailureException` in 3 Testcontainers tests; fix the merge-vs-persist routing under `@PrePersist`-preassigned Snowflake + explicit `version(0L)`. `services/checkout/src/main/java/vn/vnpt/checkout/application/StartCheckoutUseCase.java:54` and `services/checkout/src/main/java/vn/vnpt/checkout/domain/Checkout.java:54-67`.
+- [ ] **[AI-Review][CRITICAL]** C2 — derive Stripe idempotency key from `cartUuid` (stable across retries), not from the freshly-generated Snowflake. `services/checkout/src/main/java/vn/vnpt/checkout/application/StartCheckoutUseCase.java:42-43`.
+- [ ] **[AI-Review][HIGH]** Add a regression test that calls `start()` twice with the same `cartUuid` and asserts the SAME idempotency key both times — locks in C2 fix. `services/checkout/src/test/java/vn/vnpt/checkout/application/StartCheckoutUseCaseTest.java`.
+- [ ] **[AI-Review][MEDIUM]** Add `CheckoutControllerExceptionHandlerTest.java` to the File List → New section.
+- [ ] **[AI-Review][MEDIUM]** Reconcile Completion Notes line 154 with the actual idempotency derivation (notes say `cartUuid`, code uses Snowflake).
+- [ ] **[AI-Review][LOW]** Replace `assertThat(idemCaptor.getValue()).matches("\\d+:stripe\\.payment_intent\\.create")` with the explicit expected value once C2 is fixed — regex passes for any Snowflake, hides bugs.
