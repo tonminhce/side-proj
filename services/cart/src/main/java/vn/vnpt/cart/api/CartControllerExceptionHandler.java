@@ -3,6 +3,7 @@ package vn.vnpt.cart.api;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,11 +14,15 @@ import vn.vnpt.cart.domain.exception.AnonymousCartOwnershipConflictException;
 import vn.vnpt.cart.domain.exception.CartLineNotFoundException;
 import vn.vnpt.cart.domain.exception.CartNotFoundException;
 import vn.vnpt.cart.domain.exception.CartVersionConflictException;
+import vn.vnpt.cart.infrastructure.repository.CartLineRepository;
 
 /** Cart-domain exceptions → HTTP. Story 2.1. */
 @RestControllerAdvice
 @Slf4j
+@RequiredArgsConstructor
 public class CartControllerExceptionHandler {
+
+  private final CartLineRepository cartLineRepository;
 
   @ExceptionHandler({CartNotFoundException.class, CartLineNotFoundException.class})
   public ResponseEntity<Map<String, Object>> handleNotFound(RuntimeException e) {
@@ -34,7 +39,9 @@ public class CartControllerExceptionHandler {
     details.put("actualVersion", e.getActualVersion());
     Cart latest = e.getLatestCart();
     if (latest != null) {
-      details.put("cart", CartResponse.from(latest, List.of()));
+      // AC #5: the latest cart in the 409 body MUST include its lines (the BFF reconciles UI
+      // state from this view — empty lines would force a second GET round-trip).
+      details.put("cart", CartResponse.from(latest, cartLineRepository.findByCartUuid(latest.getUuid())));
     }
     Map<String, Object> body = new HashMap<>();
     body.put("code", 409);

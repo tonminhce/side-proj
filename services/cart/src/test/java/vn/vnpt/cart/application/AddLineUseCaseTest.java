@@ -40,7 +40,7 @@ class AddLineUseCaseTest {
   void add_addsNewLine_andIncrementsVersion() {
     Cart cart = cart();
     when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
-    when(cartLineRepository.findByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
     when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
     when(cartRepository.save(cart)).thenReturn(cart);
 
@@ -59,7 +59,7 @@ class AddLineUseCaseTest {
     Cart cart = cart();
     CartLine existing = CartLine.builder().cartUuid(100L).variantId(1001L).quantity(3).build();
     when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
-    when(cartLineRepository.findByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.of(existing));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.of(existing));
     when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
     when(cartRepository.save(cart)).thenReturn(cart);
 
@@ -73,7 +73,7 @@ class AddLineUseCaseTest {
   void add_concurrentEdit_throwsCartVersionConflictException() {
     Cart cart = cart();
     when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
-    when(cartLineRepository.findByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
     when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
     when(cartRepository.save(cart)).thenThrow(new ObjectOptimisticLockingFailureException(Cart.class, 100L));
     when(cartRepository.findById(100L)).thenReturn(Optional.of(cart));
@@ -110,5 +110,28 @@ class AddLineUseCaseTest {
 
     assertThatThrownBy(() -> useCase.addLine(404L, 1001L, 2, null))
         .isInstanceOf(CartNotFoundException.class);
+  }
+
+  @Test
+  void add_afterRemove_sameVariant_createsFreshLine_notUpdateTombstone() {
+    // Regression: remove-then-re-add of the same variant must NOT sum quantity onto a soft-deleted
+    // tombstone (the user would never see the line). The active-only lookup ensures a fresh row.
+    Cart cart = cart();
+    CartLine tombstone = CartLine.builder().cartUuid(100L).variantId(1001L).quantity(3).build();
+    tombstone.setIsDeleted(true);
+    when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(cartRepository.save(cart)).thenReturn(cart);
+
+    useCase.addLine(100L, 1001L, 2, 0L);
+
+    // The saved line is a fresh row (quantity=2), NOT the tombstone with summed quantity=5.
+    ArgumentCaptor<CartLine> captor = ArgumentCaptor.forClass(CartLine.class);
+    verify(cartLineRepository).save(captor.capture());
+    assertThat(captor.getValue().getQuantity()).isEqualTo(2);
+    assertThat(captor.getValue().getIsDeleted()).isNotEqualTo(true);
+    // Tombstone was untouched.
+    assertThat(tombstone.getQuantity()).isEqualTo(3);
   }
 }

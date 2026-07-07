@@ -43,7 +43,7 @@ public class AddLineUseCase {
     try {
       CartLine line =
           cartLineRepository
-              .findByCartUuidAndVariantId(cartUuid, variantId)
+              .findActiveByCartUuidAndVariantId(cartUuid, variantId)
               .map(
                   existing -> {
                     existing.setQuantity(existing.getQuantity() + quantity);

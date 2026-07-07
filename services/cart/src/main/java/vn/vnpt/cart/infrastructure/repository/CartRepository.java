@@ -32,4 +32,14 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
   @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
   @Query("select c from Cart c where c.uuid = :uuid")
   Optional<Cart> findAndLockByUuid(@Param("uuid") Long uuid);
+
+  /**
+   * Pessimistic lock on the anonymous cart row used by {@code MergeCartUseCase} to serialize
+   * concurrent merges of the same guest cart and prevent the ownership-conflict TOCTOU race
+   * (two different users claiming the same {@code guest_cart_id} at the same instant).
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select c from Cart c where c.tenantId = :tenantId and c.guestCartId = :guestCartId and c.status = vn.vnpt.cart.domain.CartStatus.ANONYMOUS")
+  Optional<Cart> lockAnonymousCart(
+      @Param("tenantId") String tenantId, @Param("guestCartId") String guestCartId);
 }

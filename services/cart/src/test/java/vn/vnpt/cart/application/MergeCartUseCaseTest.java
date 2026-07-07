@@ -65,10 +65,9 @@ class MergeCartUseCaseTest {
     when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
     when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
-    when(cartRepository.findByTenantIdAndGuestCartIdAndStatus("default", GUEST, CartStatus.ANONYMOUS))
-        .thenReturn(Optional.of(source));
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
     when(cartLineRepository.findByCartUuid(100L)).thenReturn(List.of(srcLine(1001L, 2)));
-    when(cartLineRepository.findByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.empty());
 
     MergeResult result = useCase.merge(GUEST, USER);
 
@@ -109,10 +108,9 @@ class MergeCartUseCaseTest {
   void merge_anonymousCartExpired_returns200WithEmptyUserCart() {
     Cart target = target();
     when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
-    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
-    when(cartRepository.findByTenantIdAndGuestCartIdAndStatus("default", GUEST, CartStatus.ANONYMOUS))
-        .thenReturn(Optional.empty());
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.empty());
+    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
 
     MergeResult result = useCase.merge(GUEST, USER);
 
@@ -129,10 +127,9 @@ class MergeCartUseCaseTest {
     when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
     when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
-    when(cartRepository.findByTenantIdAndGuestCartIdAndStatus("default", GUEST, CartStatus.ANONYMOUS))
-        .thenReturn(Optional.of(source));
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
     when(cartLineRepository.findByCartUuid(100L)).thenReturn(List.of(srcLine(1001L, 2)));
-    when(cartLineRepository.findByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.of(targetLine));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.of(targetLine));
 
     useCase.merge(GUEST, USER);
 
@@ -147,10 +144,9 @@ class MergeCartUseCaseTest {
     when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
     when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
-    when(cartRepository.findByTenantIdAndGuestCartIdAndStatus("default", GUEST, CartStatus.ANONYMOUS))
-        .thenReturn(Optional.of(source));
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
     when(cartLineRepository.findByCartUuid(100L)).thenReturn(List.of(srcLine(1001L, 2)));
-    when(cartLineRepository.findByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(200L, 1001L)).thenReturn(Optional.empty());
 
     useCase.merge(GUEST, USER);
 
@@ -179,10 +175,9 @@ class MergeCartUseCaseTest {
     // Concurrent merge wins the UNIQUE constraint → DataIntegrityViolationException → retry path.
     Cart target = target();
     when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
-    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
-    when(cartRepository.findByTenantIdAndGuestCartIdAndStatus("default", GUEST, CartStatus.ANONYMOUS))
-        .thenReturn(Optional.empty());
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.empty());
+    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
     org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("uq violation"))
         .when(cartMergeLogRepository).save(any());
 
@@ -191,5 +186,23 @@ class MergeCartUseCaseTest {
     assertThat(result.alreadyMerged()).isTrue();
     assertThat(result.targetCart()).isSameAs(target);
     verify(cartEventPublisher, never()).publishCartMerged(any(), any(), anyInt());
+  }
+
+  @Test
+  void merge_locksAnonymousCartBeforeOwnershipCheck() {
+    // Regression: ownership check runs AFTER lockAnonymousCart (serializes concurrent mergers
+    // of the same guest_cart_id) — the call order matters for TOCTOU safety.
+    Cart source = source();
+    Cart target = target();
+    org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(cartRepository, cartMergeLogRepository);
+    when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+    when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
+    when(cartLineRepository.findByCartUuid(100L)).thenReturn(List.of());
+
+    useCase.merge(GUEST, USER);
+
+    inOrder.verify(cartRepository).lockAnonymousCart("default", GUEST);
+    inOrder.verify(cartMergeLogRepository).findByGuestCartId(GUEST);
   }
 }

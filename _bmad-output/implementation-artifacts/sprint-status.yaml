@@ -42,7 +42,7 @@ development_status:
   1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: done  # story-automator review 2026-07-07 — orphan InventoryAdjusted.java deleted + File List discrepancies corrected (1 HIGH + 3 MEDIUM); 238/238 inventory tests (188 baseline + 30 Story 1.8 + 20 QA pass); util 57/57 + catalog 65/65 preserved; 17 modules preserved; 7/7 boundary rules
   epic-1-retrospective: optional
   epic-2: in-progress  # Epic 2: Add to Cart and Checkout
-  2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: review  # dev-story — implementation complete; 39/39 cart tests, util 57/57 + inventory 238/238 preserved, 17 modules
+  2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: done  # story-automator review 2026-07-07 — 2 HIGH fixed (AddLineUseCase soft-delete filter via findActiveByCartUuidAndVariantId; MergeCartUseCase TOCTOU ownership race fixed via lockAnonymousCart pessimistic row lock); 2 MEDIUM fixed (CartControllerExceptionHandler 409 body now includes cart lines per AC #5; story test count corrected 39→73); 0 CRITICAL remain; 73/73 cart tests green; util 57/57 + inventory 238/238 preserved; 17 modules preserved; 6/6 boundary rules
   2-2-cart-auto-expire-line-added-event-fr-17-fr-18: backlog
   2-3-checkoutservice-single-page-checkout-api-fr-19-fr-21: backlog
   2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: backlog

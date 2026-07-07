@@ -56,19 +56,24 @@ public class MergeCartUseCase {
       return new MergeResult(target, true);
     }
 
+    Cart target = getOrCreateCartUseCase.getOrCreate(null, userId);
+
+    // Pessimistic lock on the anonymous cart row serializes concurrent merges of the same
+    // guest_cart_id. Prevents the ownership TOCTOU race where two threads pass the log lookup
+    // before either inserts a merge_log row.
+    Cart source =
+        cartRepository
+            .lockAnonymousCart(DEFAULT_TENANT, guestCartId)
+            .orElse(null);
+
     // Ownership conflict — a DIFFERENT user already claimed this anonymous cart (AC #6, 409).
+    // Safe to check now: the source-cart lock above serializes concurrent mergers of the same
+    // guest_cart_id, and committed merge_log rows are visible.
     for (CartMergeLog log : cartMergeLogRepository.findByGuestCartId(guestCartId)) {
       if (!userId.equals(log.getUserId())) {
         throw new AnonymousCartOwnershipConflictException(guestCartId, log.getUserId());
       }
     }
-
-    Cart target = getOrCreateCartUseCase.getOrCreate(null, userId);
-    Cart source =
-        cartRepository
-            .findByTenantIdAndGuestCartIdAndStatus(
-                DEFAULT_TENANT, guestCartId, CartStatus.ANONYMOUS)
-            .orElse(null);
 
     int mergedLines = 0;
     if (source != null) {
@@ -77,8 +82,10 @@ public class MergeCartUseCase {
         if (Boolean.TRUE.equals(srcLine.getIsDeleted())) {
           continue;
         }
+        // Active-only lookup: a soft-deleted target line must NOT receive the sum (FR-15 invariant
+        // is "one active row per (cart, variant)").
         cartLineRepository
-            .findByCartUuidAndVariantId(target.getUuid(), srcLine.getVariantId())
+            .findActiveByCartUuidAndVariantId(target.getUuid(), srcLine.getVariantId())
             .ifPresentOrElse(
                 targetLine -> {
                   // Same variant → sum quantities (Baymard guest-cart merge UX).

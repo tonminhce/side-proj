@@ -190,9 +190,15 @@ class CartControllerTest {
   @Test
   void addLine_returns409_onVersionConflict_withLatestCart() throws Exception {
     Cart latest = cart(200L, 5L, CartStatus.ACTIVE);
+    CartLine line = CartLine.builder().cartUuid(200L).variantId(1001L).quantity(7).build();
+    line.setUuid(500L);
+    line.setVersion(0L);
     doThrow(new CartVersionConflictException(0L, 5L, latest))
         .when(addLineUseCase)
         .addLine(eq(200L), eq(1001L), eq(2), any());
+    // Regression: the 409 latest-cart body MUST include its lines (AC #5). Verify by stubbing the
+    // line repo to return one line and asserting it appears in the response.
+    when(cartLineRepository.findByCartUuid(200L)).thenReturn(List.of(line));
 
     mvc.perform(
             post("/api/carts/200/lines")
@@ -205,7 +211,9 @@ class CartControllerTest {
         .andExpect(jsonPath("$.details.expectedVersion").value(0))
         .andExpect(jsonPath("$.details.actualVersion").value(5))
         .andExpect(jsonPath("$.details.cart.cartUuid").value(200))
-        .andExpect(jsonPath("$.details.cart.version").value(5));
+        .andExpect(jsonPath("$.details.cart.version").value(5))
+        .andExpect(jsonPath("$.details.cart.lines[0].variantId").value(1001))
+        .andExpect(jsonPath("$.details.cart.lines[0].quantity").value(7));
   }
 
   @Test
