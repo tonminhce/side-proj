@@ -12,6 +12,7 @@ Expected time-to-healthy: **~60 s** on a warm cache.
 | Postgres `catalog_db` | `5432` | per-service DB for CatalogService (Story 1.1) — user `catalog_user` / pwd `catalog_pass`; JDBC `jdbc:postgresql://localhost:5432/catalog_db` |
 | Postgres `inventory_db` | `5432` | per-service DB for InventoryService (Story 1.5) — user `inventory_user` / pwd `inventory_pass`; JDBC `jdbc:postgresql://localhost:5432/inventory_db` |
 | Postgres `cart_db` | `5432` | per-service DB for CartService (Story 2.1) — user `cart_user` / pwd `cart_pass`; JDBC `jdbc:postgresql://localhost:5432/cart_db` |
+| Postgres `checkout_db` | `5432` | per-service DB for CheckoutService (Story 2.3) — user `checkout_user` / pwd `checkout_pass`; JDBC `jdbc:postgresql://localhost:5432/checkout_db` |
 | Kafka          | `9092`    | KRaft, single-node, internal listeners + PLAINTEXT host  |
 | Elasticsearch  | `9200`    | single-node (8.15.0); Vietnamese analyzer is application-layer (Story 6.2) |
 | Redis          | `6379`    | `maxmemory-policy allkeys-lru`                           |
@@ -72,6 +73,8 @@ A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthchec
 
 - `catalog_db` (Story 1.1) — owner `catalog_user` / pwd `catalog_pass`.
 - `inventory_db` (Story 1.5) — owner `inventory_user` / pwd `inventory_pass`.
+- `cart_db` (Story 2.1) — owner `cart_user` / pwd `cart_pass`.
+- `checkout_db` (Story 2.3) — owner `checkout_user` / pwd `checkout_pass`.
 
 `inventory_reservation` table — Saga-initiated reservations for cart checkout (Story 1.6). TTL=15min, sweeper emits `inventory.released` for expired rows.
 
@@ -88,6 +91,10 @@ CartService — Port 8085. Anonymous carts persist via cookie UUID; merge on log
 `cart.line.added` event topic — Emitted on every line add/upsert (`AddLineUseCase.addLine`) and once per transferred line during a merge (`MergeCartUseCase.merge`). Payload carries `(cartUuid, lineUuid, variantId, quantity, tenantId, signatures)`. RecommendationService (Story 6.4 / FR-54) subscribes via Modulith outbox bridge and uses the variant-id stream as the real-time signal. Consumers dedupe on `eventId` via the `processed_event` table per NFR-IDEM-1.
 
 `cart.expired` event topic — Emitted by `CartAutoExpireSweeperJob` (every 5 minutes by default) for each cart whose `expires_at` has passed AND status is `ANONYMOUS` or `ACTIVE`. The sweeper transitions the cart to `ABANDONED` (terminal) and emits the event in the same transaction (ADR-04). Payload carries `(cartUuid, previousStatus, expiredLinesCount, expiresAt, expiredAt, tenantId, signatures)`. The 30-day TTL is set via V002's `expires_at DEFAULT (now() + INTERVAL '30 days')` — the application does NOT compute the TTL on insert. End-to-end: `dev/scripts/cart_expiry_smoke.sh`.
+
+CheckoutService — Port 8084. `POST /api/checkouts/start` creates a `Checkout` aggregate in `PAYMENT_PENDING` status, emits the `checkout.started` event to the checkout outbox (HMAC-signed), returns `{ checkoutId, status: "PAYMENT_PENDING" }`. Single-page checkout per FR-19 (Baymard: cuts drop-off 10–25%). Story 2.3 does NOT create a Stripe PaymentIntent — that's Story 2.4's FR-20 hook. The BFF re-exposes as `POST /bff/storefront/checkout` and the storefront polls `GET /bff/storefront/checkout/{id}` every 2 seconds; the BFF delegates to `GET /api/checkouts/{uuid}` which returns the current Checkout state (status, shipping address, cart reference, version, Stripe client secret passthrough) per FR-21.
+
+`checkout.started` event topic — Emitted by `StartCheckoutUseCase` on every successful checkout start. Payload carries `(checkoutUuid, cartUuid, userId, guestCartId, tenantId, shippingAddress, cartLines, stripeClientSecret, signatures)`. The saga orchestrator (Story 2.5 / FR-22 + FR-23) consumes this via the Modulith outbox bridge to drive the order FSM transitions (`PAYMENT_PENDING → STOCK_RESERVED → PAID/FAILED/CANCELLED`). Consumers dedupe on `eventId` via the `processed_event` table per NFR-IDEM-1. End-to-end: `dev/scripts/checkout_smoke.sh`.
 
 On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
 

@@ -71,7 +71,14 @@ jobs:
       - name: Test cart module (Story 2.1 — gate blocking)
         run: mvn -pl services/cart -am test
 
-      # 2. Validate — proves all 17 <module> entries resolve.
+      # Checkout gate (Story 2.3 — CheckoutService single-page checkout API, FR-19/FR-21).
+      # The 6 ArchUnit rules in CheckoutPackageBoundaryTest + V001 + ~24 unit/integration tests
+      # ride in the same command.
+      - name: Test checkout module (Story 2.3 — gate blocking)
+        run: mvn -pl services/checkout -am test
+
+      # 2. Validate — proves all <module> entries resolve (17 entries; Story 2.3 adds services/checkout
+      # which was pre-listed at module-init for forward-service declaration).
       - name: Reactor validate (mvn validate)
         run: mvn validate
 

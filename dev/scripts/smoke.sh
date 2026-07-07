@@ -116,6 +116,14 @@ else
   printf '~ cart: cart.expired events not yet emitted (no expiry smoke run yet)\n'
 fi
 
+# 1k. Story 2.3 / FR-19 — checkout.started event topic reachable. Empty result is acceptable on a
+#     fresh DB (no checkout start yet); the end-to-end emission is exercised by checkout_smoke.sh.
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_CHECKOUT_USER:-checkout_user}" -d "${POSTGRES_CHECKOUT_DB:-checkout_db}" -tAc "SELECT 1 FROM outbox WHERE event_type = 'checkout.started' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: checkout.started events emitted (FR-19 wired)"
+else
+  printf '~ checkout: checkout.started events not yet emitted (no checkout smoke run yet)\n'
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"

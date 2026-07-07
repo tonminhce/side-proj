@@ -1,0 +1,44 @@
+# services/checkout/src/test/resources/application-test.yml — Story 2.3
+# Test profile. Datasource is overridden at runtime by @DynamicPropertySource (Testcontainers).
+
+server:
+  port: 0   # Random port for @SpringBootTest.
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+  datasource:
+    url: ${TC_POSTGRES_URL:jdbc:postgresql://localhost:5432/checkout_db}
+    username: ${TC_POSTGRES_USER:checkout_user}
+    password: ${TC_POSTGRES_PASSWORD:checkout_pass}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/checkout
+    baseline-on-migrate: true
+
+  # Exclude util's UtilsAutoConfiguration (pre-existing dual-bean bug pulls in TenantRoutingDataSource
+  # which fails without a pre-seeded tenant) + the Modulith JDBC bridge (we write outbox directly).
+  autoconfigure:
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+checkout:
+  events:
+    hmac-secret: dev-only-secret-do-not-use-in-prod
+
+logging:
+  level:
+    vn.vnpt.checkout: INFO

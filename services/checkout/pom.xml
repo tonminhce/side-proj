@@ -12,5 +12,148 @@
     </parent>
 
     <artifactId>checkout</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
+
+    <name>checkout</name>
+    <description>CheckoutService — single-page checkout API (FR-19, FR-21; ADR-01, ADR-03, ADR-04, ADR-14, ADR-20)</description>
+
+    <dependencies>
+        <!--
+          util: brings BOMs (Spring Boot 4.0.0, Spring Cloud 2025.1.0) transitively, plus
+          @SoftUk / UkValidator / HmacEventSigner / JcsCanonicalJson / BaseEntity /
+          SnowflakeIdGenerator. Do NOT re-import the BOMs here — architecture-detail.md line 97.
+        -->
+        <dependency>
+            <groupId>vn.vnpt</groupId>
+            <artifactId>util</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+        <!-- Web: embedded Tomcat for the /api/checkouts REST controllers. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA: Checkout aggregate. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Flyway: schema authority. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Postgres JDBC driver (runtime). -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Actuator: /actuator/health. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Spring Modulith: @ApplicationModule on CheckoutApplication.java. -->
+        <dependency>
+            <groupId>org.springframework.modulith</groupId>
+            <artifactId>spring-modulith-starter-core</artifactId>
+        </dependency>
+
+        <!-- Modulith outbox bridge — ADR-01 / ADR-14 / ADR-20 (in-process @ApplicationModuleListener). -->
+        <dependency>
+            <groupId>org.springframework.modulith</groupId>
+            <artifactId>spring-modulith-events-jdbc</artifactId>
+        </dependency>
+
+        <!--
+          ponytail: checkout has NO inbound cross-service event consumers in Story 2.3 (the saga
+          listener for checkout.started is Story 2.5), so checkout declares no sibling-service
+          dependency and no Avro dependency. checkout.started is a plain Lombok @Value record
+          serialized by Jackson.
+        -->
+
+        <!-- Test scope -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ArchUnit: CheckoutPackageBoundaryTest. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers: context tests. Pinned to 1.20.4 (matches Story 1.8). -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          ponytail: util/pom.xml declares Lombok as <optional>true</optional>, so it does NOT
+          propagate transitively. Declare Lombok directly. Version matches util's.
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.42</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
+                <configuration>
+                    <release>25</release>
+                    <!-- -parameters: @RequestParam / @PathVariable arg-name resolution at runtime. -->
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.42</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>4.0.0</version>
+                <!-- NO <skip>true</skip> — spring-boot:run must work. -->
+            </plugin>
+        </plugins>
+    </build>
 </project>
