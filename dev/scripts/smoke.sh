@@ -91,6 +91,15 @@ else
   printf '~ inventory: inventory.lifecycle events not yet emitted (no smoke run yet)\n'
 fi
 
+# 1h. Story 2.1 / FR-14 — cart_db provisioned (postgres-init/03-create-cart-db.sql, ADR-03) and
+#     the cart.merged outbox topic reachable. Empty result is acceptable on a fresh DB (no merge
+#     yet); the end-to-end cart.merged emission is exercised by dev/scripts/cart_merge_smoke.sh.
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_CART_USER:-cart_user}" -d "${POSTGRES_CART_DB:-cart_db}" -tAc "SELECT 1 FROM pg_tables WHERE tablename = 'cart_merge_log' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: cart_db + cart.merged pipeline provisioned (Story 2.1)"
+else
+  printf '~ cart: cart_db not provisioned yet (run migrations / start cart service)\n'
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"

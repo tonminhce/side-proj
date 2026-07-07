@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # story-automator review 1-8 — orphan deleted + File List reconciled; status done
+last_updated: 2026-07-07  # dev-story — Story 2.1 CartService implemented, status → review
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,8 +41,8 @@ development_status:
   1-7-multi-warehouse-per-variant-stock-fr-10: done  # story-automator review — 1 LOW fixed (OnHandUseCaseTest HN-B region SOUTH→NORTH); 188 inventory tests green (actual surefire count; +100 from @RepeatedTest); util 57/57 preserved; 17 modules preserved; 5/5 boundary rules
   1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: done  # story-automator review 2026-07-07 — orphan InventoryAdjusted.java deleted + File List discrepancies corrected (1 HIGH + 3 MEDIUM); 238/238 inventory tests (188 baseline + 30 Story 1.8 + 20 QA pass); util 57/57 + catalog 65/65 preserved; 17 modules preserved; 7/7 boundary rules
   epic-1-retrospective: optional
-  epic-2: backlog  # Epic 2: Add to Cart and Checkout
-  2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: backlog
+  epic-2: in-progress  # Epic 2: Add to Cart and Checkout
+  2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: review  # dev-story — implementation complete; 39/39 cart tests, util 57/57 + inventory 238/238 preserved, 17 modules
   2-2-cart-auto-expire-line-added-event-fr-17-fr-18: backlog
   2-3-checkoutservice-single-page-checkout-api-fr-19-fr-21: backlog
   2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: backlog

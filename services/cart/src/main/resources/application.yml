@@ -1,0 +1,77 @@
+# services/cart/src/main/resources/application.yml — Story 2.1
+# Per-service datasource. Defaults match dev/postgres-init/03-create-cart-db.sql; prod secrets come
+# from Vault (ADR-21). No real secrets in this file.
+
+server:
+  port: 8085   # CartService: 8085. catalog 8081, admin-bff 8082, inventory 8083, checkout 8084.
+
+spring:
+  application:
+    name: cart
+
+  main:
+    # util's library beans intentionally override Spring Boot autoconfig beans; allow it.
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    # Same Modulith bridge exclusion as inventory (Story 1.5 pattern): our ModulithOutboxPublisher
+    # writes the canonical `outbox` table directly, so the bridge's JDBC EventPublicationRepository
+    # (which expects its own EVENT_PUBLICATION column shape) is excluded. The in-process
+    # @ApplicationModuleListener leg (spring-modulith-events-core) stays intact.
+    exclude:
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CART_DB:cart_db}
+    username: ${POSTGRES_CART_USER:cart_user}
+    password: ${POSTGRES_CART_PASSWORD:cart_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns schema; JPA validates entity <-> table mapping.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # architecture.md anti-pattern guard: never auto-open a transaction in the view layer.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    # cart migrations live under db/migration/cart/ (sub-folder) to avoid classpath collisions
+    # with sibling service migrations when a downstream service depends on both.
+    locations: classpath:db/migration/cart
+    baseline-on-migrate: true
+    table: flyway_schema_history
+
+  # Spring Modulith outbox bridge — ADR-01 / ADR-14 / ADR-20.
+  modulith:
+    events:
+      jdbc:
+        poll-interval: 500ms   # architecture-detail.md line 146 (ADR-14 operational)
+      outbox:
+        publish-backpressure-threshold: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+cart:
+  events:
+    # ADR-20 producer HMAC secret for cart.merged events. Prod overrides via Vault at
+    # secret/events/hmac/cart. Computed over the JCS-canonical payload in CartEventPublisher.
+    hmac-secret: ${CART_EVENTS_HMAC_SECRET:dev-only-secret-do-not-use-in-prod}
+  merge:
+    # Algorithm for the idempotency-key hash (AC #6). Config-driven for a future SHA-3 swap.
+    sha-algorithm: SHA-256
+
+logging:
+  level:
+    vn.vnpt.cart: INFO
+    org.springframework.modulith: INFO

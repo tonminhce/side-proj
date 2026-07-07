@@ -65,6 +65,12 @@ jobs:
       - name: Test inventory module (Story 1.6 — gate flipped to blocking)
         run: mvn -pl services/inventory -am test
 
+      # Cart gate (Story 2.1 — CartService anonymous + merge on login, FR-14/15/16). Blocking from
+      # day one: the checkout saga (Story 2.5) depends on this module's green tests, and the
+      # CartPackageBoundaryTest (incl. the NFR-IDEM-3 @SoftUk guard) rides in the same command.
+      - name: Test cart module (Story 2.1 — gate blocking)
+        run: mvn -pl services/cart -am test
+
       # 2. Validate — proves all 17 <module> entries resolve.
       - name: Reactor validate (mvn validate)
         run: mvn validate

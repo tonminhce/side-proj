@@ -11,6 +11,7 @@ Expected time-to-healthy: **~60 s** on a warm cache.
 | Postgres       | `5432`    | superuser `postgres`, db `app`, pwd `postgres` (dev only) |
 | Postgres `catalog_db` | `5432` | per-service DB for CatalogService (Story 1.1) — user `catalog_user` / pwd `catalog_pass`; JDBC `jdbc:postgresql://localhost:5432/catalog_db` |
 | Postgres `inventory_db` | `5432` | per-service DB for InventoryService (Story 1.5) — user `inventory_user` / pwd `inventory_pass`; JDBC `jdbc:postgresql://localhost:5432/inventory_db` |
+| Postgres `cart_db` | `5432` | per-service DB for CartService (Story 2.1) — user `cart_user` / pwd `cart_pass`; JDBC `jdbc:postgresql://localhost:5432/cart_db` |
 | Kafka          | `9092`    | KRaft, single-node, internal listeners + PLAINTEXT host  |
 | Elasticsearch  | `9200`    | single-node (8.15.0); Vietnamese analyzer is application-layer (Story 6.2) |
 | Redis          | `6379`    | `maxmemory-policy allkeys-lru`                           |
@@ -79,6 +80,10 @@ A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthchec
 `inventory.lifecycle` event topic — Unified phase-aware topic carrying `phase ∈ {RESERVED, RELEASED, ALLOCATED, SHIPPED, ADJUSTED}`. Replaces the Story 1.6 split into `inventory.reserved`/`inventory.released` for new emissions; legacy topics remain live for Sprint 9 migration window (Story 9.x will cut them over).
 
 `@SoftUk` audit on `services/inventory/.../domain/...` — every soft-deletable JPA entity (extends `RootEntity`) MUST carry `@SoftUk` or `@SoftUks` (or `@IgnoreSoftUkAudit` with justification). `Warehouse` carries `@SoftUk(name="warehouse_code_per_tenant", fields={"tenantId","code"})`. Append-only + terminal-only entities opt out via `@IgnoreSoftUkAudit` + JavaDoc justification. Solves DI-09.
+
+`cart.merged` event topic — Emitted on the first successful merge of an anonymous cart into a user-bound cart. Payload carries `(guestCartId, userId, sourceCartUuid, targetCartUuid, mergedLinesCount, mergedAt, signatures)`. Consumers (Story 2.2+ `cart.line.added`, future RecommendationService) subscribe to `cart.lifecycle` and filter on `phase=MERGED`. The merge endpoint is idempotent on `(guestCartId, userId)` (NFR-IDEM-3) — retries return the same target cart with no side effects. End-to-end: `dev/scripts/cart_merge_smoke.sh`.
+
+CartService — Port 8085. Anonymous carts persist via cookie UUID; merge on login is idempotent on `(guest_cart_id, user_id)`. Optimistic concurrency via `cart.version` returns 409 with the latest state on conflict (FR-16). Future `cart.line.added` + `cart.expired` events (Story 2.2) feed recommendations and the auto-expire sweeper.
 
 On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
 

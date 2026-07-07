@@ -56,7 +56,7 @@ completedSessions: []
 | 1.5 | done | done | done | done | - | complete |
 | 1.6 | done | done | done | done | - | complete |
 | 1.7 | done | done | done | done | - | complete |
-| 1.8 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | pending |
+| 1.8 | done | done | done | done | - | complete |
 
 <!-- Progress rows -->
 
@@ -77,3 +77,4 @@ completedSessions: []
 - **[2026-07-06T21:54:36Z]** Story 1.5: complete + pushed (f813fba)
 - **[2026-07-06T23:43:46Z]** Story 1.6: complete + pushed (5a2e0e5)
 - **[2026-07-07T00:33:16Z]** Story 1.7: complete + pushed (abdf16d)
+- **[2026-07-07T01:48:25Z]** Story 1.8: complete + pushed (1ddb8dc) — Epic 1 fully done
