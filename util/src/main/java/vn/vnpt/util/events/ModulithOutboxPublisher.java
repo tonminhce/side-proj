@@ -77,7 +77,7 @@ public abstract class ModulithOutboxPublisher {
     return out;
   }
 
-  /** Jackson EventSerializer + NoOpEventPublicationRepository beans — required by Modulith autoconfig. */
+  /** Jackson EventSerializer + NoOpEventPublicationRepository + EventPublicationRegistry — required by Modulith autoconfig. */
   @Configuration
   public static class ModulithBridgeSupport {
 

@@ -13,6 +13,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 import vn.vnpt.util.common.FileUtil;
 import vn.vnpt.util.common.SnowflakeIdGenerator;
 import vn.vnpt.util.common.TemplateExcelWriter;
+import vn.vnpt.util.component.tenant.DataSourceProperties;
 import vn.vnpt.util.properties.FileProperties;
 import vn.vnpt.util.properties.FolderProperties;
 import vn.vnpt.util.properties.TelegramProperties;
@@ -25,7 +26,8 @@ import vn.vnpt.util.telegram.TelegramBotAPIUtil;
 @EnableConfigurationProperties({
   FileProperties.class,
   FolderProperties.class,
-  TelegramProperties.class
+  TelegramProperties.class,
+  DataSourceProperties.class
 })
 public class UtilsAutoConfiguration {
 

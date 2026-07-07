@@ -29,7 +29,6 @@ spring:
     # and aligning the schema.
     exclude:
       - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
-      - vn.vnpt.util.UtilsAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CATALOG_DB:catalog_db}
@@ -100,7 +99,7 @@ logging:
 tenants:
   datasources:
     default:
-      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${CATALOG_DB:catalog_db}
+      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${CATALOG_DB:catalog_db}
+      driverClassName: org.postgresql.Driver
       username: ${CATALOG_USER:catalog_user}
       password: ${CATALOG_PASSWORD:catalog_pass}
-      driver-class-name: org.postgresql.Driver

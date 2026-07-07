@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 @Getter
 @ConfigurationProperties(prefix = "tenants")
-@Component
 public class DataSourceProperties {
 
   private Map<Object, Object> dataSources = new LinkedHashMap<>();

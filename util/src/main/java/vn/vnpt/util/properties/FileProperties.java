@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Configuration;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Configuration
 @ConfigurationProperties(prefix = "file", ignoreUnknownFields = false)
 public class FileProperties {
   private String endPoint;

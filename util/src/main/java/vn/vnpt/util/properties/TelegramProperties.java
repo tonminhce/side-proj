@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Configuration;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Configuration
 @ConfigurationProperties(prefix = "telegram", ignoreUnknownFields = false)
 public class TelegramProperties {
   private String errorBotToken;

@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Configuration;
 @Getter
 @Setter
 @NoArgsConstructor
-@Configuration
 @ConfigurationProperties(prefix = "folder", ignoreUnknownFields = false)
 public class FolderProperties {
   private Temp temp;
