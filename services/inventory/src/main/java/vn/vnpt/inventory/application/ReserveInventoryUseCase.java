@@ -26,32 +26,7 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
 import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
 
-/**
- * ReserveInventoryUseCase — Story 1.6 / FR-9 (DI-01 root-cause fix), ADR-04, ADR-11, ADR-12,
- * ADR-20. Extended in Story 1.7 / FR-10 with region-based warehouse dispatch. Migrated in
- * Story 1.8 / FR-11 to emit the unified {@link InventoryLifecycleEvent} via the
- * {@link LifecycleEventPublisher} (which dual-publishes {@code inventory.reserved} as a
- * legacy alias for the Sprint 9 migration window).
- *
- * <p>Atomic per-row reservation with Postgres {@code SELECT … FOR UPDATE}. Steps:
- *
- * <ol>
- *   <li>Validate input (quantity, sagaStepId, ttl).
- *   <li>Validate warehouse-dispatch XOR (warehouseId / shippingRegion) — exactly one non-null.
- *   <li>Resolve {@code warehouseId}: if null, call {@link PickWarehouseForReservationUseCase}
- *       with the shipping region; the picker returns the best in-region warehouse (or
- *       cross-region fallback) with enough stock.
- *   <li>Validate warehouse exists.
- *   <li><b>ADR-11 idempotency:</b> same {@code saga_step_id} returns the existing reservation.
- *   <li>Acquire {@code FOR UPDATE} lock on {@code inventory_ledger} rows for the pair.
- *   <li>ADR-11 idempotency re-check inside the lock.
- *   <li>Compute {@code available = onHand} ({@code SUM(delta)} — Story 1.6 Issue 9 fix). If
- *       {@code available < requested}, throw {@link InsufficientStockException} (409).
- *   <li>Insert {@code inventory_reservation} row (status=ACTIVE, expiresAt=now+ttl).
- *   <li>Append {@code inventory_ledger} row with {@code reason='reserve', delta=-qty}.
- *   <li>Emit outbox row with HMAC signature (ADR-20) via the lifecycle publisher.
- * </ol>
- */
+/** Atomic SELECT FOR UPDATE reservation. Story 1.6+ — see ADR-04/-11/-12/-20. */
 @Service
 @Transactional
 @RequiredArgsConstructor

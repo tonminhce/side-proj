@@ -3,6 +3,7 @@ package vn.vnpt.util.annotation;
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 import java.lang.annotation.*;
+// gitnexus: false-cycle (JSR-380 validatedBy requires reference to validator class)
 import vn.vnpt.util.common.SpecialSymbolValidator;
 
 @Documented

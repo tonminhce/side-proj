@@ -13,32 +13,12 @@ import vn.vnpt.inventory.domain.exception.InsufficientStockException;
 import vn.vnpt.inventory.domain.exception.ReservationNotFoundException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
 
-/**
- * Maps reservation-domain exceptions to HTTP status codes — Story 1.6 / FR-9.
- *
- * <ul>
- *   <li>{@link InsufficientStockException} → 409 Conflict (the FR-9 binding — exactly one of N
- *       concurrent reserves returns 409).
- *   <li>{@link WarehouseNotFoundException} → 404 Not Found.
- *   <li>{@link ReservationNotFoundException} → 404 Not Found (Story 1.8 / FR-11 ALLOCATED path).
- *   <li>{@link IllegalArgumentException} (validation) → 400 Bad Request.
- *   <li>{@link DataIntegrityViolationException} (e.g., duplicate {@code saga_step_id} from a
- *       saga retry race) → 409 Conflict.
- * </ul>
- *
- * <p>No generic {@code Exception → 500} catch — Boot 4's default handler returns 500. Future
- * Story 10.x adds structured error envelopes (correlation IDs, OTel trace IDs); not this story.
- */
+/** Reservation-domain exceptions → HTTP. Story 1.6. */
 @RestControllerAdvice
 @Slf4j
 public class ReservationControllerExceptionHandler {
 
-  /**
-   * Postgres surfaces the unique-constraint violation with the conflicting value in the message
-   * (e.g. "duplicate key value violates unique constraint \"uq_inventory_reservation_saga_step\"
-   * ... Key (saga_step_id)=(step-xyz) already exists"). Capture it for the saga's diagnostic
-   * logging — the retry sidecar wants to know which step already won.
-   */
+  /** Postgres surfaces the duplicate saga_step_id in the message; capture for saga retry diagnostics. */
   private static final Pattern SAGA_STEP_PATTERN =
       Pattern.compile("\\(saga_step_id\\)=\\(([^)]+)\\)");
 

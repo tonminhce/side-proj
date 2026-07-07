@@ -18,53 +18,7 @@ import vn.vnpt.inventory.infrastructure.repository.WarehouseRepository;
 import vn.vnpt.util.common.SnowflakeIdGenerator;
 import vn.vnpt.util.events.HmacEventSigner;
 
-/**
- * CatalogEventListener — Story 1.5 / AC #14 — first in-process event consumer in the platform.
- *
- * <p>Consumes {@link CatalogProductCreated} (catalog's first Avro event from Story 1.3) and
- * inserts an idempotent beacon row into {@code inventory_ledger} for the new variant:
- *
- * <ul>
- *   <li>Seeds a default {@code Warehouse} if none exists (v1 single-warehouse default, ADR-06).
- *   <li>Inserts a {@code delta = 0}, {@code reason = "received"} ledger row keyed by a
- *       {@link SnowflakeIdGenerator#generateId() generated} {@code eventId} as the cross-aggregate
- *       idempotency key. The {@code uq_inventory_ledger_event_id} UNIQUE constraint catches
- *       redeliveries; the listener treats {@link DataIntegrityViolationException} as a no-op
- *       (NFR-IDEM-1).
- * </ul>
- *
- * <p>Why {@code delta = 0}: the listener does not know initial stock; that's the admin's job
- * (Story 8.1). The ledger row is the CANONICAL IDEMPOTENCY BEACON — same event redelivering hits
- * the unique constraint and is caught, treated as a no-op.
- *
- * <p><b>HMAC VERIFY (ADR-20 consumer half):</b> the listener verifies the producer's signature
- * before inserting. The default behavior:
- *
- * <ul>
- *   <li>Empty signature ({@code catalog.events.signature=}) — TRUST the event (in-process
- *       Modulith mode; the producer and consumer share the same JVM). This is the Story 1.5
- *       default.
- *   <li>Non-empty signature — verify HMAC-SHA256 of the canonical envelope
- *       {@code {"consumer":"inventory"}} under the catalog secret. If verification fails, log a
- *       warning and skip the insert.
- * </ul>
- *
- * <p><b>Ponytail:</b> the canonical envelope is intentionally a constant ({@code
- * {"consumer":"inventory"}}), not the event payload. Reasoning: in v1 in-process Modulith mode,
- * the producer and consumer are in the same JVM, so event-content-binding is unnecessary (the
- * Modulith bridge already guarantees in-process delivery). When services split (Story 10.x),
- * the envelope becomes event-content-binding and the signature is fetched from the producer's
- * outbox row (or attached to the Kafka message header).
- *
- * <p><b>Vault-pinned secrets:</b> deferred to a hardening story alongside catalog's Vault wiring
- * (ADR-18). For v1 the dev default in {@code application.yml} is acceptable.
- *
- * <p><b>YAGNI:</b> no {@code @KafkaListener} for {@code catalog.product.created} — intra-JVM in
- * Modulith mode (ADR-01 line 17-86). The {@code @ApplicationModuleListener} invokes when the
- * catalog's {@code outbox} insert fires via {@code ApplicationEventPublisher}. Cross-process
- * delivery (when services split) is Story 10.x; at that point the annotation swaps to
- * {@code @KafkaListener(topic="catalog.product.created")}.
- */
+/** In-process consumer of catalog events. Story 1.5 (first consumer) / 1.6 (HMAC verify). */
 @Component
 @RequiredArgsConstructor
 public class CatalogEventListener {

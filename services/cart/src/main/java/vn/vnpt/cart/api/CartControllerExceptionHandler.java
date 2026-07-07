@@ -14,19 +14,7 @@ import vn.vnpt.cart.domain.exception.CartLineNotFoundException;
 import vn.vnpt.cart.domain.exception.CartNotFoundException;
 import vn.vnpt.cart.domain.exception.CartVersionConflictException;
 
-/**
- * Maps cart-domain exceptions to HTTP status codes — Story 2.1 / FR-16, AC #5, #6.
- *
- * <ul>
- *   <li>{@link CartNotFoundException} / {@link CartLineNotFoundException} → 404.
- *   <li>{@link CartVersionConflictException} → 409 with the latest cart state (BFF reconciliation).
- *   <li>{@link AnonymousCartOwnershipConflictException} → 409 with the owning user id.
- *   <li>{@link IllegalArgumentException} → 400.
- * </ul>
- *
- * <p>{@code InvalidInputException} (from util's {@code UkValidator}) is handled by util's
- * {@code ApiExceptionHandle} (component-scanned via {@code SoftDeleteConfig}) → HTTP 400.
- */
+/** Cart-domain exceptions → HTTP. Story 2.1. */
 @RestControllerAdvice
 @Slf4j
 public class CartControllerExceptionHandler {

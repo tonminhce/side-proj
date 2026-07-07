@@ -10,19 +10,7 @@ import org.springframework.stereotype.Component;
 import vn.vnpt.inventory.domain.ReservationStatus;
 import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepository;
 
-/**
- * ReservationSweeperJob — Story 1.6 / FR-9 (TTL auto-expiry).
- *
- * <p>Runs at a fixed delay (default 30s) and releases ACTIVE reservations whose
- * {@code expires_at < now()}. Each release is its own transaction (REQUIRES_NEW via
- * {@link ReleaseInventoryUseCase#releaseExpired(Long)}) so the batch survives a single bad
- * release.
- *
- * <p>Bounded to {@code inventory.reservation.sweeper-batch-size} per tick (default 100) — this
- * prevents a DB lock storm if 10k reservations expire at once. The next tick picks up the rest.
- *
- * <p>ponytail: global lock, per-account locks if throughput matters.
- */
+/** TTL sweeper — Story 1.6. ponytail: global lock, batch-bounded. */
 @Component
 @Slf4j
 public class ReservationSweeperJob {
