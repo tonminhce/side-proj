@@ -1,20 +1,20 @@
 package vn.vnpt.payment.infrastructure.stripe;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import vn.vnpt.payment.application.port.AuthorizePaymentCommand;
-import vn.vnpt.payment.application.port.PaymentPortUnavailableException;
 import vn.vnpt.payment.application.port.PaymentResult;
 import vn.vnpt.payment.infrastructure.IdempotencyKey;
 
 /**
  * Contract test for the test-double {@link StripePaymentAdapter} — Story 3.1 / AC #3, #7, #9.
  *
- * <p>Asserts the test-double records every input verbatim (so the use-case test can compare
- * idempotency keys across calls) and simulates the transient-failure path for the saga compensator.
+ * <p>Asserts the test-double records every input verbatim so the use-case test can compare
+ * idempotency keys across calls. Input validation (negative amount, ISO-4217 currency) lives at
+ * the trust boundary in {@link AuthorizePaymentCommand}'s compact constructor; the port itself
+ * stays a dumb pass-through.
  */
 class StripePaymentAdapterTest {
 
@@ -38,17 +38,5 @@ class StripePaymentAdapterTest {
     assertThat(recorded.amountCents()).isEqualTo(1999L);
     assertThat(recorded.currency()).isEqualTo("VND");
     assertThat(recorded.stripeCustomerId()).isEqualTo("cus_test_1");
-  }
-
-  @Test
-  void authorize_negativeAmountThrowsPaymentPortUnavailable() {
-    StripePaymentAdapter adapter = new StripePaymentAdapter();
-    String key = IdempotencyKey.forOrderStep(7L, "payment.authorize");
-    AuthorizePaymentCommand cmd = new AuthorizePaymentCommand(
-        7L, -1L, "VND", null, key);
-
-    assertThatThrownBy(() -> adapter.authorize(cmd))
-        .isInstanceOf(PaymentPortUnavailableException.class)
-        .hasMessageContaining("amountCents");
   }
 }

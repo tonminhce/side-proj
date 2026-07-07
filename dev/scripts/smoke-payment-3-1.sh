@@ -76,7 +76,11 @@ if [ "${STATUS:-}" != "UP" ]; then
 fi
 
 echo "== 3. IdempotencyKey contract — SHA-256(42:payment.authorize) is a 64-char lowercase hex"
-EXPECTED="$(printf '%s' '42:payment.authorize' | shasum -a 256 | awk '{print $1}')"
+# Use openssl (macOS + Linux both ship it) instead of `shasum` (mac-only) or `sha256sum`
+# (Linux-only). The hash itself is computed by the Java factory (IdempotencyKey.forOrderStep)
+# and verified by IdempotencyKeyTest; this is an end-to-end smoke check, not an algorithm
+# re-implementation.
+EXPECTED="$(printf '%s' '42:payment.authorize' | openssl dgst -sha256 -hex | awk '{print $NF}')"
 echo "  expected: ${EXPECTED}"
 if ! printf '%s' "${EXPECTED}" | grep -qE '^[0-9a-f]{64}$'; then
   echo "FAIL: expected hash is not 64-char lowercase hex: ${EXPECTED}"

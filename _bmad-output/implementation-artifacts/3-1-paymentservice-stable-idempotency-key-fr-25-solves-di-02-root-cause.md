@@ -4,7 +4,7 @@ baseline_commit: 9dcb345
 
 # Story 3.1: PaymentService — stable idempotency key (FR-25) — solves DI-02 root cause
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -135,6 +135,24 @@ So that Kafka redelivery / Modulith outbox bridge redelivery / saga-recovery re-
 3. **Task 6 — single ArchUnit rule, not three** (Tightened). The story listed 3 ArchUnit rules. The `application → infrastructure` rule (broad) and `infrastructure → application` rule (broad) both flag the legal port-seam dependency, so they were dropped. The remaining rule — `application.usecase → infrastructure.stripe` — is the one that actually enforces AC #7's "use case doesn't know about Stripe" intent.
 4. **PaymentModulithConfig added** (Implementation detail, NOT a deviation from AC but worth noting). Story did not specify how to wire Spring Modulith's `StalenessMonitorConfiguration` without a real outbox publisher. `PaymentModulithConfig` provides an in-memory `EventPublicationRegistry` directly. `@ConditionalOnMissingBean` means Story 3.5's real wiring overrides it.
 
+### Senior Developer Review (AI) — 2026-07-07
+
+Reviewer auto-fix pass; **6 findings, 4 fixed, 2 noted (LOW)**. Status: **done**.
+
+**Findings & fixes:**
+
+- **HIGH 1 — `PaymentModulencyConfig` was dead code** → **fixed**. Commit `6dd265a` added `util.events.EventsAutoConfiguration` which provides the same `EventPublicationRegistry` bean. `@ConditionalOnMissingBean` on `PaymentModulithConfig.eventPublicationRegistry()` always skipped it (smoke log confirms `DefaultEventPublicationRegistry` is from util, not the local config). Deleted the file; `PaymentModulithOutboxPublisher` still loads `ModulithBridgeSupport` via `@Import` to provide the NoOp `EventPublicationRepository` that `EventsAutoConfiguration` needs. Smoke green after deletion.
+- **MEDIUM 2 — Smoke script uses macOS-only `shasum -a 256`** → **fixed**. Replaced with `openssl dgst -sha256 -hex` (macOS + Linux compatible). Smoke re-verified end-to-end.
+- **MEDIUM 3 — `StripePaymentAdapter` threw `PaymentPortUnavailableException` (transient 5xx) on negative `amountCents` (client 4xx)** → **fixed**. Saga compensator would retry a non-retryable condition forever. Moved validation to `AuthorizePaymentCommand` compact constructor: negative amount + non-ISO-4217 currency now throw `IllegalArgumentException` at the trust boundary. The port stays a dumb pass-through. Added `AuthorizePaymentCommandTest` (7 boundary tests).
+- **MEDIUM 4 — Git changes outside story scope not in File List** → **noted**. 4 service yml files (`services/cart/catalog/checkout/inventory/src/main/resources/application.yml`) + 5 util files (`util/.../UtilsAutoConfiguration.java`, `util/.../events/EventsAutoConfiguration.java`, `util/.../events/ModulithOutboxPublisher.java`, `util/.../META-INF/.../AutoConfiguration.imports`, `util/src/main/resources/application.yml`) modified in commit `6dd265a` are not part of Story 3.1; they belong to the separate `wip(util)` housekeeping commit. Logged here for transparency.
+- **LOW 5 — Currency validation too lax** → **fixed** as part of MEDIUM 3. Now requires uppercase 3-letter ISO-4217 (`[A-Z]{3}`); rejects `"vnd"`, `"V1D"`, etc.
+- **LOW 6 — `@ComponentScan(basePackages = "vn.vnpt.payment")` redundant** → **fixed**. `@SpringBootApplication` defaults to the annotated class's package; the redundant `@ComponentScan` and its import were removed.
+
+**Verification after fixes:**
+- `mvn -pl services/payment test` → **36/36 green** (was 30; +7 boundary tests, −1 redundant adapter test).
+- `bash dev/scripts/smoke-payment-3-1.sh` → exits 0; service UP in ~5s; SHA-256 contract verified; Flyway V001 applied.
+- Story File List updated; Change Log appended.
+
 ### File List
 
 - `services/payment/pom.xml` (modified — packaging pom → jar + deps per catalog/checkout pattern)
@@ -147,16 +165,23 @@ So that Kafka redelivery / Modulith outbox bridge redelivery / saga-recovery re-
 - `services/payment/src/main/java/vn/vnpt/payment/application/usecase/AuthorizePaymentUseCase.java` (new)
 - `services/payment/src/main/java/vn/vnpt/payment/infrastructure/stripe/StripePaymentAdapter.java` (new — test-double)
 - `services/payment/src/main/java/vn/vnpt/payment/infrastructure/outbox/PaymentModulithOutboxPublisher.java` (new — extends util's ModulithOutboxPublisher so the bridge support beans are registered; Story 3.5 will replace with real outbox writes)
-- `services/payment/src/main/java/vn/vnpt/payment/infrastructure/outbox/PaymentModulithConfig.java` (new — provides in-memory EventPublicationRegistry for Modulith staleness monitor; @ConditionalOnMissingBean means Story 3.5's real wiring overrides)
 - `services/payment/src/main/resources/application.yml` (new)
 - `services/payment/src/main/resources/db/migration/payment/V001__create_payment_aggregate.sql` (new)
 - `services/payment/src/test/java/vn/vnpt/payment/infrastructure/IdempotencyKeyTest.java` (new — 25 tests)
+- `services/payment/src/test/java/vn/vnpt/payment/application/port/AuthorizePaymentCommandTest.java` (new — 7 boundary-validation tests; replaces the redundant negative-amount adapter test)
 - `services/payment/src/test/java/vn/vnpt/payment/application/usecase/AuthorizePaymentUseCaseTest.java` (new — 2 tests)
-- `services/payment/src/test/java/vn/vnpt/payment/infrastructure/stripe/StripePaymentAdapterTest.java` (new — 2 tests)
+- `services/payment/src/test/java/vn/vnpt/payment/infrastructure/stripe/StripePaymentAdapterTest.java` (new — 1 test)
 - `services/payment/src/test/java/vn/vnpt/payment/PaymentPortContractTest.java` (new — 1 ArchUnit test)
-- `dev/scripts/smoke-payment-3-1.sh` (new — runtime smoke, exits 0 verified)
+- `dev/scripts/smoke-payment-3-1.sh` (new — runtime smoke, exits 0 verified; uses `openssl dgst` for cross-platform SHA-256)
 - `dev/.env.example` (modified — added `POSTGRES_PAYMENT_DB/USER/PASSWORD` triple)
 - `dev/postgres-init/05-create-payment-db.sql` (new — `payment_db` + `payment_user` role for dev Postgres)
+
+**Removed during review (auto-fix HIGH #1):**
+- `services/payment/src/main/java/vn/vnpt/payment/infrastructure/outbox/PaymentModulithConfig.java` (deleted — dead code; `EventsAutoConfiguration` in util provides the same bean)
+
+**Files changed in git but outside Story 3.1 scope (commit `6dd265a wip(util)` — noted for transparency, not Story 3.1 work):**
+- `services/cart/src/main/resources/application.yml`, `services/catalog/src/main/resources/application.yml`, `services/checkout/src/main/resources/application.yml`, `services/inventory/src/main/resources/application.yml` (added `UtilsAutoConfiguration` exclude + corrected tenants datasource key casing)
+- `util/src/main/java/vn/vnpt/util/UtilsAutoConfiguration.java`, `util/src/main/java/vn/vnpt/util/events/EventsAutoConfiguration.java`, `util/src/main/java/vn/vnpt/util/events/ModulithOutboxPublisher.java`, `util/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`, `util/src/main/resources/application.yml` (added `EventsAutoConfiguration` to util's autoconfig exports)
 
 ### Change Log
 
@@ -170,10 +195,18 @@ So that Kafka redelivery / Modulith outbox bridge redelivery / saga-recovery re-
   - V001 Flyway — `payment_aggregate` placeholder + canonical `outbox` + `processed_event` (mirrors catalog/cart/checkout).
   - Modulith bridge wiring — `PaymentModulithOutboxPublisher` extends util's `ModulithOutboxPublisher` (registers bridge support); `PaymentModulithConfig` provides in-memory `EventPublicationRegistry` for staleness monitor.
   - Runtime smoke — `dev/scripts/smoke-payment-3-1.sh` boots, health-checks, asserts SHA-256, verifies Flyway.
+- 2026-07-07 — Review auto-fix pass. 6 findings (1 HIGH, 3 MEDIUM, 2 LOW); 4 fixed, 2 noted.
+  - HIGH: deleted dead `PaymentModulithConfig` (util's `EventsAutoConfiguration` provides the same bean; `@ConditionalOnMissingBean` always skipped).
+  - MEDIUM: smoke script `shasum -a 256` → `openssl dgst -sha256 -hex` (cross-platform).
+  - MEDIUM: port validation moved to `AuthorizePaymentCommand` compact constructor (negative amount + non-ISO-4217 currency throw IAE at the trust boundary).
+  - MEDIUM: git vs story File List discrepancy documented (4 service ymls + 5 util files from separate `6dd265a wip(util)` commit).
+  - LOW: removed redundant `@ComponentScan` from `PaymentApplication`; tightened currency regex to `[A-Z]{3}`.
+  - Verification: `mvn test` 36/36 green; runtime smoke exits 0.
+- 2026-07-07 — Status updated to **done**; sprint-status.yaml synced.
 
 ## Status
 
-review
+done
 
 ## Dev Notes
 
@@ -236,8 +269,18 @@ review
 
 claude-opus-4-7 (MiniMax-M3 harness, 2026-07-07)
 
+### Review Pass
+
+- 2026-07-07 — Senior Developer Review (AI) auto-fix pass: 6 findings, 4 fixed (1 HIGH dead-code deletion, 3 MEDIUM), 2 LOW noted. Status → **done**. See "Senior Developer Review (AI)" section above for full breakdown.
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- ✅ 36/36 payment tests green post-review (was 30; +7 boundary-validation, −1 redundant adapter test).
+- ✅ Runtime smoke exits 0 (cross-platform hash via `openssl dgst`).
+- ✅ Story File List corrected; sprint-status.yaml synced.
+
 ### File List
+
+See "File List" section above.

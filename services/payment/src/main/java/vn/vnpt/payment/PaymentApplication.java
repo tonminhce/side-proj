@@ -2,7 +2,6 @@ package vn.vnpt.payment;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.modulith.ApplicationModule;
 
 /**
@@ -27,7 +26,6 @@ import org.springframework.modulith.ApplicationModule;
  * architecture-detail.md line 76. Multi-tenant disposition lands in Epic 5.
  */
 @SpringBootApplication
-@ComponentScan(basePackages = "vn.vnpt.payment")
 @ApplicationModule(displayName = "payment")
 public class PaymentApplication {
 

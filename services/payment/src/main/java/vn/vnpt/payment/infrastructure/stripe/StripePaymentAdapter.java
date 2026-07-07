@@ -18,9 +18,9 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
  * real adapter forwards {@code cmd.idempotencyKey()} as the Stripe {@code Idempotency-Key} header;
  * this test-double records it for assertions.
  *
- * <p>ponytail: throws {@link PaymentPortUnavailableException} on negative {@code amountCents} as a
- * test hook (the saga's compensator handles transient failures); upgrade to a Stripe-shaped error
- * in Story 3.3.
+ * <p>ponytail: a port is a dumb pass-through — input validation lives at the trust boundary
+ * (the command's compact constructor), not here. {@link PaymentPortUnavailableException} is reserved
+ * for transient failures (5xx, network timeout) the saga compensator retries.
  */
 @Component
 public class StripePaymentAdapter implements PaymentPort {
@@ -29,10 +29,6 @@ public class StripePaymentAdapter implements PaymentPort {
 
   @Override
   public PaymentResult authorize(AuthorizePaymentCommand cmd) {
-    if (cmd.amountCents() < 0) {
-      throw new PaymentPortUnavailableException(
-          "amountCents must be non-negative (got " + cmd.amountCents() + ")");
-    }
     calls.computeIfAbsent(cmd.orderUuid(), k -> new java.util.ArrayList<>())
         .add(new CallRecord(
             cmd.orderUuid(),

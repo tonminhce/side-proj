@@ -16,8 +16,14 @@ public record AuthorizePaymentCommand(
     String idempotencyKey) {
 
   public AuthorizePaymentCommand {
-    if (currency == null || currency.length() != 3) {
-      throw new IllegalArgumentException("currency must be a 3-letter ISO-4217 code");
+    if (currency == null || !currency.matches("[A-Z]{3}")) {
+      throw new IllegalArgumentException("currency must be an uppercase 3-letter ISO-4217 code");
+    }
+    if (amountCents < 0) {
+      // Trust-boundary validation: a negative amount is a client error (4xx-shaped), not a
+      // transient port failure. Throwing IAE here keeps the saga compensator from retrying
+      // a non-retryable condition; the port stays a dumb pass-through (no validation).
+      throw new IllegalArgumentException("amountCents must be non-negative (got " + amountCents + ")");
     }
   }
 
