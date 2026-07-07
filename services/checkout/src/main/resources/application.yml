@@ -95,3 +95,9 @@ tenants:
       username: ${CHECKOUT_USER:checkout_user}
       password: ${CHECKOUT_PASSWORD:checkout_pass}
       driver-class-name: org.postgresql.Driver
+
+# Saga 2.5 — adapter needs HMAC secret from inventory module (dev default)
+inventory.events.hmac-secret: dev-only-secret-do-not-use-in-prod
+
+# Saga 2.5 — catalog HMAC secret (dev default)
+catalog.events.hmac-secret: dev-only-secret-do-not-use-in-prod
