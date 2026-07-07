@@ -20,5 +20,6 @@ public record CheckoutResponse(
     Long version,
     ShippingAddressDto shippingAddress,
     String stripeClientSecret,
+    String paymentIntentId,
     Instant createdAt,
     Instant updatedAt) {}

@@ -3,6 +3,9 @@ package vn.vnpt.checkout.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +16,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+import vn.vnpt.checkout.application.port.StripePaymentGateway;
 import vn.vnpt.checkout.domain.Checkout;
 import vn.vnpt.checkout.domain.CheckoutStatus;
 import vn.vnpt.checkout.domain.ShippingAddress;
@@ -21,12 +26,16 @@ import vn.vnpt.checkout.infrastructure.outbox.CheckoutEventPublisher;
 import vn.vnpt.checkout.infrastructure.repository.CheckoutRepository;
 import vn.vnpt.util.common.SnowflakeIdGenerator;
 
-/** Story 2.3 / FR-19 — happy path + 3 validation paths. */
+/** Story 2.3 / FR-19; Story 2.4 / FR-20 — happy path + 3 validation paths + amount computation. */
 @ExtendWith(MockitoExtension.class)
 class StartCheckoutUseCaseTest {
 
+  private static final String PI_ID = "pi_test_abc123";
+  private static final String PI_SECRET = "pi_test_abc123_secret_xyz";
+
   @Mock CheckoutRepository checkoutRepository;
   @Mock CheckoutEventPublisher checkoutEventPublisher;
+  @Mock StripePaymentGateway stripePaymentGateway;
   @InjectMocks StartCheckoutUseCase useCase;
 
   private ShippingAddress address() {
@@ -41,11 +50,20 @@ class StartCheckoutUseCaseTest {
   }
 
   private List<CartLineSnapshot> cartLines() {
-    return List.of(CartLineSnapshot.builder().variantId(1001L).quantity(2).build());
+    return List.of(
+        CartLineSnapshot.builder().variantId(1001L).quantity(2).unitPriceMinor(50_000L).build());
+  }
+
+  /** Story 2.4 default currency wiring — {@code @Value} default in the use case. */
+  private void injectCurrencyDefault(String vnd) {
+    ReflectionTestUtils.setField(useCase, "currencyDefault", vnd);
   }
 
   @Test
   void start_validRequest_persistsCheckoutInPaymentPendingAndEmitsCheckoutStarted() {
+    injectCurrencyDefault("VND");
+    when(stripePaymentGateway.createPaymentIntent(anyLong(), eq("vnd"), anyString()))
+        .thenReturn(new StripePaymentGateway.Result(PI_ID, PI_SECRET));
     // Mimic BaseEntity.@PrePersist — production assigns the Snowflake ID during persist().
     when(checkoutRepository.save(any(Checkout.class)))
         .thenAnswer(
@@ -64,25 +82,43 @@ class StartCheckoutUseCaseTest {
                 .userId("u-abc-123")
                 .shippingAddress(address())
                 .cartLines(cartLines())
-                .stripeClientSecret("pi_xxx_secret_xxx")
                 .build());
 
     assertThat(result.getCartUuid()).isEqualTo(12345L);
     assertThat(result.getUserId()).isEqualTo("u-abc-123");
     assertThat(result.getStatus()).isEqualTo(CheckoutStatus.PAYMENT_PENDING);
-    assertThat(result.getStripeClientSecret()).isEqualTo("pi_xxx_secret_xxx");
+    assertThat(result.getStripeClientSecret()).isEqualTo(PI_SECRET);
+    assertThat(result.getPaymentIntentId()).isEqualTo(PI_ID);
     assertThat(result.getUuid()).isNotNull();
     assertThat(result.getTenantId()).isEqualTo("default");
 
     ArgumentCaptor<Checkout> captor = ArgumentCaptor.forClass(Checkout.class);
     verify(checkoutRepository).save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(CheckoutStatus.PAYMENT_PENDING);
+    assertThat(captor.getValue().getPaymentIntentId()).isEqualTo(PI_ID);
 
     ArgumentCaptor<List<CartLineSnapshot>> linesCaptor = ArgumentCaptor.forClass(List.class);
     verify(checkoutEventPublisher)
         .publishCheckoutStarted(any(Checkout.class), linesCaptor.capture());
     assertThat(linesCaptor.getValue()).hasSize(1);
     assertThat(linesCaptor.getValue().get(0).getVariantId()).isEqualTo(1001L);
+
+    // PaymentIntent amountMinor = Σ(unitPriceMinor × quantity) = 50_000 × 2 = 100_000.
+    ArgumentCaptor<Long> amountCaptor = ArgumentCaptor.forClass(Long.class);
+    verify(stripePaymentGateway)
+        .createPaymentIntent(amountCaptor.capture(), eq("vnd"), anyString());
+    assertThat(amountCaptor.getValue()).isEqualTo(100_000L);
+
+    // Story 2.4 / FR-20 / AC #4 — idempotency key = (checkoutUuid, "stripe.payment_intent.create")
+    // (ADR-11 / NFR-IDEM-2). The use case pre-generates the Snowflake ID so the Stripe key MATCHES
+    // the persisted checkoutUuid — retries of the same logical checkout reuse the same PaymentIntent.
+    ArgumentCaptor<Checkout> savedCaptor = ArgumentCaptor.forClass(Checkout.class);
+    verify(checkoutRepository).save(savedCaptor.capture());
+    ArgumentCaptor<String> idemCaptor = ArgumentCaptor.forClass(String.class);
+    verify(stripePaymentGateway)
+        .createPaymentIntent(anyLong(), anyString(), idemCaptor.capture());
+    assertThat(idemCaptor.getValue()).isEqualTo(savedCaptor.getValue().getUuid() + ":stripe.payment_intent.create");
+    assertThat(idemCaptor.getValue()).matches("\\d+:stripe\\.payment_intent\\.create");
   }
 
   @Test
@@ -130,6 +166,9 @@ class StartCheckoutUseCaseTest {
 
   @Test
   void start_guestCartId_accepted_whenUserIdMissing() {
+    injectCurrencyDefault("VND");
+    when(stripePaymentGateway.createPaymentIntent(anyLong(), eq("vnd"), anyString()))
+        .thenReturn(new StripePaymentGateway.Result(PI_ID, PI_SECRET));
     when(checkoutRepository.save(any(Checkout.class))).thenAnswer(inv -> inv.getArgument(0));
 
     Checkout result =
@@ -143,5 +182,26 @@ class StartCheckoutUseCaseTest {
 
     assertThat(result.getGuestCartId()).isEqualTo("guest-cookie-uuid");
     assertThat(result.getUserId()).isNull();
+    assertThat(result.getPaymentIntentId()).isEqualTo(PI_ID);
+  }
+
+  @Test
+  void start_amountMinorMustBePositive_throwsIllegalArgumentException() {
+    // unitPriceMinor = 0 → sum = 0 → rejected.
+    List<CartLineSnapshot> zero =
+        List.of(
+            CartLineSnapshot.builder().variantId(1001L).quantity(1).unitPriceMinor(0L).build());
+
+    assertThatThrownBy(
+            () ->
+                useCase.start(
+                    StartCheckoutRequest.builder()
+                        .cartUuid(12345L)
+                        .userId("u-abc-123")
+                        .shippingAddress(address())
+                        .cartLines(zero)
+                        .build()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("amountMinor");
   }
 }

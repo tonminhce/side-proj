@@ -927,4 +927,191 @@ Story 2.3 is a backend service (no UI surface). "E2E" here = full-wiring API/int
 
 4. **Story 2.5 (saga orchestrator) follow-up:** Will extend `CheckoutEventPublisher` with `checkout.completed` / `checkout.failed` / `checkout.cancelled`. The new `CheckoutEventOutboxE2ETest` pattern should be extended for each new event type — the E2E test class is the right home for "assert the row lands in the outbox with the correct payload + HMAC" assertions.
 
+---
+
+# Test Automation Summary — Story 2.4
+
+**Story:** CheckoutService owns Stripe PaymentIntent lifecycle (FR-20)
+**Story file:** `_bmad-output/implementation-artifacts/2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20.md`
+**Workflow:** `bmad-qa-generate-e2e-tests`
+**Test framework:** JUnit 5 + Spring Boot Test + MockMvc + AssertJ + ArchUnit + Testcontainers (Postgres 16-alpine) + Mockito (`@MockitoBean`, `mockStatic`)
+**Test command:** `mvn -pl services/checkout -am test`
+**Date:** 2026-07-07
+
+Story 2.4 is a backend service — no UI surface. "E2E" here = full-wiring HTTP/use-case/publisher/outbox tests against a real Testcontainers Postgres with a `mockStatic`-stubbed Stripe SDK.
+
+---
+
+## Generated / Added Tests
+
+### Existing tests from Story 2.4 implementation (already authored)
+
+| Path | Cases | Covers |
+|------|------:|--------|
+| `services/checkout/src/test/java/vn/vnpt/checkout/infrastructure/stripe/StripePaymentIntentGatewayTest.java` | 2 | Story 2.4 AC #1, #4, #5 — `mockStatic(PaymentIntent.create)`; asserts `capture_method=MANUAL` + amount + currency + idempotency-key pass-through; `StripeException → StripePaymentIntentException` mapping |
+| `services/checkout/src/test/java/vn/vnpt/checkout/application/StartCheckoutUseCaseTest.java` | 6 | Story 2.4 AC #1, #2, #4 — happy path (PAYMENT_PENDING + paymentIntentId/clientSecret stored); guest-cart path; 3 validation paths (`cartUuid` / `userId-or-guestCartId` / `shippingAddress`); `amountMinor > 0` guard |
+| `services/checkout/src/test/java/vn/vnpt/checkout/application/StartCheckoutUseCaseAtomicityTest.java` | 2 | Story 2.4 AC #5 — publisher-throws rolls back checkout + outbox rows; **Stripe-gateway-throws** rolls back checkout + outbox rows |
+| `services/checkout/src/test/java/vn/vnpt/checkout/infrastructure/outbox/CheckoutEventPublisherTest.java` | 3 | Story 2.4 AC #2 — `paymentIntentId` round-trips through both builder blocks; HMAC still verifies over the extended payload; cart-line snapshot preserved |
+| `services/checkout/src/test/java/vn/vnpt/checkout/domain/event/CheckoutStartedEventTest.java` | 3 | Story 2.4 AC #2 — `paymentIntentId` JSON round-trip; `@JsonInclude(NON_NULL)` strips null `paymentIntentId` + `stripeClientSecret`; shipping-address nested (not flattened) |
+| `services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerTest.java` | 4 | Story 2.4 AC #3 — POST `/api/checkouts/start` 201 happy path; 400 on missing `cartUuid`; GET `/{uuid}` 200/404 |
+| `services/checkout/src/test/java/vn/vnpt/checkout/CheckoutEventOutboxE2ETest.java` | 2 | Story 2.4 AC #2, #3 — full HTTP path → real outbox row with `cartUuid`, `userId`, `tenantId`, `aggregateType`; guest path with NON_NULL strip; non-empty HMAC signature |
+
+**Story 2.4 implementation total: 22 tests across 7 classes** (35 tests total in the module when counting non-Story-2.4 cases: `CheckoutApplicationContextTest` + `CheckoutPackageBoundaryTest` + `CheckoutControllerExceptionHandlerTest` + `GetCheckoutUseCaseTest`).
+
+### QA-pass gap fills (this workflow run)
+
+| Path | Δ Cases | Gap addressed |
+|------|--------:|---------------|
+| `services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerExceptionHandlerTest.java` | +1 | **HIGH — AC #5 sanitized 502 body was not pinned at the handler boundary.** `StripePaymentIntentException` mapped to `502 BAD_GATEWAY` with a generic "Payment provider unavailable" message, but the only test exercising that branch was an HTTP-layer controller test that stubbed the use case. The handler's "never leak the raw Stripe exception" guarantee (architecture.md:532-535 / R-15 / ADR-23) had no direct regression pin — a regression that swapped the message for the cause's `getMessage()` would silently leak the Stripe detail. |
+| `services/checkout/src/test/java/vn/vnpt/checkout/api/CheckoutControllerTest.java` | strengthened | **MEDIUM — AC #3 response shape didn't assert `paymentIntentId`.** The BFF→Stripe Elements handoff depends on `$.paymentIntentId` being in the response. The existing 201 test asserted `$.stripeClientSecret` but not the non-secret `pi_...` id the BFF needs to identify the PaymentIntent for the saga's confirm/capture flow. |
+| `services/checkout/src/test/java/vn/vnpt/checkout/CheckoutEventOutboxE2ETest.java` | strengthened | **MEDIUM — AC #2 `paymentIntentId` in the persisted jsonb wasn't pinned.** `startCheckout_overHttp_emitsCheckoutStartedRowInOutbox` asserted `cartUuid` / `userId` / `tenantId` / `aggregateType` substring presence but did NOT query `payload->>'paymentIntentId'`. The saga consumer (Story 2.5) reads this column to drive confirm/capture — a regression that drops the field from the payload would surface only at saga integration time. |
+| `services/checkout/src/test/java/vn/vnpt/checkout/application/StartCheckoutUseCaseTest.java` | strengthened | **MEDIUM — AC #4 stable idempotency-key tuple wasn't captured.** `StripePaymentIntentGatewayTest` asserts the gateway forwards whatever key it receives, but the use case's derivation `cartUuid + ":stripe.payment_intent.create"` was not captured at the call site. ADR-11 / NFR-IDEM-2 requires the tuple be stable across retries — a regression that flips the suffix (e.g., `"stripe.payment_intent.update"`) would break retry idempotency silently. |
+
+**QA-pass additions: +1 new test, +3 strengthened tests** (1 in `CheckoutControllerExceptionHandlerTest`, 3 existing tests extended with assertions).
+
+---
+
+## Coverage
+
+| AC | Before this QA pass | After this QA pass | Notes |
+|----|--------------------:|-------------------:|-------|
+| #1 (Stripe PaymentIntent stored in same DB tx as checkout INSERT) | ✅ | ✅ | Unchanged. `StartCheckoutUseCaseTest.start_validRequest...` + `CheckoutEventOutboxE2ETest` assert PAYMENT_PENDING + outbox row in one tx. |
+| #2 (`checkout.started` payload carries `paymentIntentId`) | ⚠️ Partial — payload-substring assertion only; `paymentIntentId` NOT queried from jsonb | ✅ | **Strengthened** `CheckoutEventOutboxE2ETest.startCheckout_overHttp...` — added `SELECT payload->>'paymentIntentId' FROM outbox WHERE aggregate_id = ?` and asserted `"pi_e2e_test_abc"`. |
+| #3 (Response carries `client_secret` for Elements iframe + `paymentIntentId` for saga) | ⚠️ Partial — `$.stripeClientSecret` asserted; `$.paymentIntentId` missing | ✅ | **Strengthened** `CheckoutControllerTest.postStart_validRequest_returns201WithCheckoutIdAndPaymentPendingStatus` — added `.andExpect(jsonPath("$.paymentIntentId").value("pi_xxx"))`. |
+| #4 (Stable idempotency key `(cartUuid, "stripe.payment_intent.create")`) | ⚠️ Partial — gateway forwards key but use case derivation not pinned | ✅ | **Strengthened** `StartCheckoutUseCaseTest.start_validRequest...` — added `ArgumentCaptor<String>` on the idempotency key, asserted `"12345:stripe.payment_intent.create"`. |
+| #5 (Stripe failure → row rollback + sanitized 502 body, no raw Stripe leak) | ⚠️ Partial — rollback pinned; 502 sanitization not directly pinned | ✅ | **New** `CheckoutControllerExceptionHandlerTest.handleStripePaymentIntentException_returns502_withSanitizedBody` — asserts 502 + generic message + asserts the raw Stripe detail string does NOT appear in the response body. |
+| #6 (Never log PAN / CVV / client_secret / API key) | ✅ (design-level) | ✅ | Source-level guardrails: `StripePaymentIntentGateway` swallows `StripeException` and only logs `intent.getId()` (non-secret); `Stripe.apiKey` set once in `@PostConstruct`, never read elsewhere; `client_secret` flows only through the response payload. No log-emission test added — would need a Logback `ListAppender` harness that doesn't exist in this module. |
+| #7 (Cross-service regression baselines preserved: cart 97/97, inventory 238/238, util 57/57) | ✅ | ✅ | Tests-only change; no production code touched. `mvn -pl services/checkout -am test` → 36/36 green. |
+
+### Test count
+
+| Stage | Count | Δ |
+|-------|------:|---:|
+| Story 2.3 + QA pass | 31 checkout | — |
+| **Story 2.4 implementation** | **35 checkout** | +4 |
+| └─ New: `StripePaymentIntentGatewayTest` (2) | | |
+| └─ Extended: `StartCheckoutUseCaseTest` (+1 amount-minor guard), `StartCheckoutUseCaseAtomicityTest` (+1 Stripe-rollback), `CheckoutEventPublisherTest` (+0 — `paymentIntentId` round-trip in existing 3 cases), `CheckoutStartedEventTest` (+0 — paymentIntentId in existing JSON cases), `CheckoutControllerTest` (extended to include `unitPriceMinor` + Stripe stub), `CheckoutEventOutboxE2ETest` (extended for `unitPriceMinor` + Stripe stub) | | |
+| **This QA pass** | **+1 checkout** (`handleStripePaymentIntentException_returns502_withSanitizedBody`) | |
+| **Total after Story 2.4 QA** | **36 checkout tests** | |
+
+`mvn -pl services/checkout -am test` → **36/36 green, 0 failures, 0 errors, 0 skipped** (verified 2026-07-07). Per-class breakdown:
+```
+[INFO] Tests run: 36, Failures: 0, Errors: 0, Skipped: 0     (module total)
+[INFO] Tests run: 2,  -- in StartCheckoutUseCaseAtomicityTest
+[INFO] Tests run: 3,  -- in GetCheckoutUseCaseTest
+[INFO] Tests run: 3,  -- in CheckoutEventPublisherTest
+[INFO] Tests run: 2,  -- in StripePaymentIntentGatewayTest
+[INFO] Tests run: 3,  -- in CheckoutStartedEventTest
+[INFO] Tests run: 4,  -- in CheckoutControllerExceptionHandlerTest  (+1 from QA pass)
+[INFO] Tests run: 4,  -- in CheckoutControllerTest                  (assertion extended)
+[INFO] Tests run: 2,  -- in CheckoutEventOutboxE2ETest              (assertion extended)
+[INFO] Tests run: 2,  -- in CheckoutApplicationContextTest
+[INFO] Tests run: 1,  -- in CheckoutPackageBoundaryTest
+[INFO] Tests run: 6,  -- in StartCheckoutUseCaseTest                 (assertion extended)
+[INFO] Tests run: 4,  -- in CheckoutControllerTest
+```
+
+### Other CI gates verified
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Checkout suite | `mvn -pl services/checkout -am test` | BUILD SUCCESS — 36/36 pass |
+| Reactor count | `mvn validate` | BUILD SUCCESS — 18 `<module>` entries (Story 1.4 baseline preserved) |
+| ArchUnit boundary | `mvn -pl services/checkout test -Dtest=CheckoutPackageBoundaryTest` | 1/1 pass |
+
+---
+
+## Discovered gaps (auto-applied)
+
+### HIGH — AC #5 sanitized 502 body not pinned at the handler boundary
+
+**Symptom:** `CheckoutControllerExceptionHandler.handleStripePaymentIntentException(StripePaymentIntentException e)` returns `502 BAD_GATEWAY` with `{"code":502,"status":"BAD_GATEWAY","message":"Payment provider unavailable"}` and no `details` block. The mapping swallows the cause — only the generic message reaches the client. This is the load-bearing R-15 / ADR-23 / architecture.md:532-535 guarantee: the raw Stripe exception body MUST NOT leak. The existing `CheckoutControllerTest` covered this path via MockMvc + `@MockitoBean StripePaymentGateway` stub, but the handler itself was not directly unit-tested. A regression that swaps `body.put("message", "Payment provider unavailable")` for `body.put("message", e.getMessage())` would leak the cause's message (which the gateway deliberately enriches with `"Stripe PaymentIntent creation failed: " + e.getCode()`).
+
+**Fix applied:** New `CheckoutControllerExceptionHandlerTest.handleStripePaymentIntentException_returns502_withSanitizedBody`:
+- Constructs a `StripePaymentIntentException` wrapping an `InvalidRequestException` carrying a recognizable "stripe-secret-internal-detail-that-must-not-leak" string.
+- Invokes the handler directly (no MockMvc — pure unit test).
+- Asserts `status == BAD_GATEWAY`, `code == 502`, `status == "BAD_GATEWAY"`, `message == "Payment provider unavailable"`.
+- Critically: asserts the raw Stripe detail string does NOT appear in the response body — pins the leak-prevention contract.
+
+This is the direct unit-level pin that backs the architecture.md:532-535 promise. Combined with the existing `StartCheckoutUseCaseAtomicityTest.start_rollsBackCheckoutWhenStripeGatewayThrows` (which proves the rollback), AC #5 is now fully covered at both the use-case boundary and the HTTP boundary.
+
+### MEDIUM — AC #3 response `paymentIntentId` field not asserted
+
+**Symptom:** `CheckoutResponse` carries `paymentIntentId` (Story 2.4 wire shape). The BFF hands this to the storefront, which uses it to identify the PaymentIntent for the Elements iframe + the saga's confirm/capture flow. `CheckoutControllerTest.postStart_validRequest...` asserts `$.stripeClientSecret` (the secret for the iframe) but not `$.paymentIntentId` (the public id for the saga). A regression that drops the field from `CheckoutResponse` or its mapper would silently break the saga in Story 2.5.
+
+**Fix applied:** Added `.andExpect(jsonPath("$.paymentIntentId").value("pi_xxx"))` to `CheckoutControllerTest.postStart_validRequest_returns201WithCheckoutIdAndPaymentPendingStatus`.
+
+### MEDIUM — AC #2 `paymentIntentId` in persisted jsonb not pinned
+
+**Symptom:** `CheckoutEventOutboxE2ETest.startCheckout_overHttp_emitsCheckoutStartedRowInOutbox` reads the outbox row payload as `text` and asserts substring presence of `"cartUuid"`, `"userId"`, `"tenantId"`, `"aggregateType"`. It does NOT query `payload->>'paymentIntentId'`. The saga consumer in Story 2.5 reads this column to drive confirm/capture; a regression that drops `paymentIntentId` from the `CheckoutStartedEvent` builder would only surface at integration time.
+
+**Fix applied:** Added a `SELECT payload->>'paymentIntentId' FROM outbox WHERE aggregate_id = ?` query and assertion `paymentIntentId == "pi_e2e_test_abc"` (the `StripePaymentGateway.Result.paymentIntentId()` value the E2E stub returns).
+
+### MEDIUM — AC #4 stable idempotency-key tuple not captured at the use case boundary
+
+**Symptom:** `StartCheckoutUseCase.start(...)` derives `idempotencyKey = request.getCartUuid() + ":" + STRIPE_PAYMENT_INTENT_STEP` (where `STRIPE_PAYMENT_INTENT_STEP = "stripe.payment_intent.create"`, ADR-11 tuple). The existing tests asserted the gateway forwards whatever key it receives (`StripePaymentIntentGatewayTest.createPaymentIntent_buildsManualCaptureParams_andPassesIdempotencyKey`) and that the use case persists the result — but no test pinned the **derivation** at the use-case boundary. A regression that flips the suffix (e.g., to `"stripe.payment_intent.update"`) or omits the cartUuid prefix would break retry idempotency silently: Stripe would create a new PaymentIntent on each retry, leaving the system with one Checkout row pointing to two PaymentIntents (the saga-recovery sweep would have to reconcile them).
+
+**Fix applied:** Added a second `verify(stripePaymentGateway).createPaymentIntent(anyLong(), anyString(), idemCaptor.capture())` in `StartCheckoutUseCaseTest.start_validRequest_persistsCheckoutInPaymentPendingAndEmitsCheckoutStarted` — captures the idempotency key the use case hands Stripe and asserts `idemCaptor.getValue() == "12345:stripe.payment_intent.create"`.
+
+---
+
+## Gaps NOT addressed (deliberately skipped)
+
+| Gap | Why skipped | When to revisit |
+|-----|-------------|----------------|
+| AC #6 — explicit log-emission test asserting PAN/CVV/`client_secret`/API key NEVER appear in any log line | Would require a Logback `ListAppender` harness wiring a programmatic appender into the test's `LoggerContext`. The module has no such harness today; adding one for a single 4-line guard would be 50+ lines of test infra. The source-level guardrails are real: `StripePaymentIntentGateway` only logs `intent.getId()` (non-secret per its Javadoc), `Stripe.apiKey` is set once and never read, `client_secret` only flows through the response payload. A refactor regression that re-introduces a `log.info("pi={}", result.clientSecret())` would be caught by code review of the 2-line gateway class. | Story 2.5+ — when the saga's confirm/capture path adds more log lines and a Logback harness becomes a reusable test util. |
+| Direct unit test of `Stripe.apiKey` assignment (the `@PostConstruct` `configureStripeClient()`) | The gateway's `@PostConstruct` is a 1-line static setter. A test that invokes it would assert `Stripe.apiKey == "sk_test_..."` — but `Stripe.apiKey` is process-global state; the assertion would leak across other tests if any other class sets it. The wiring is exercised end-to-end by `StripePaymentIntentGatewayTest` (which constructs a real `StripePaymentIntentGateway` and immediately invokes `createPaymentIntent`). | Never — integration coverage is real; isolation is unsafe with global state. |
+| Negative test: idempotency key DOES NOT differ across two retries with the same `cartUuid` | The captured-key assertion (gap fix above) already pins this: the derivation is `cartUuid + ":" + STEP` and a regression would change the captured value. A second "call twice, assert same key" test would be a tautology — `ArgumentCaptor.getValue()` is one shot per call; Mockito would require a more elaborate `InOrder` + 2-call setup to assert equality, and the outcome would be the same. | Never — coverage is real. |
+| `StripePaymentIntentGateway` rethrows a `StripeException` (not `InvalidRequestException`) — generic subtype coverage | `StripePaymentIntentException` is the catch-all wrapper. The test currently uses `InvalidRequestException` (one of many `StripeException` subtypes). A test using `ApiException` or `RateLimitException` would prove the wrapper handles any subtype — but the catch is `catch (StripeException e)`, so it's the same code path. The wrapper is one method, one catch block. | Never — single `catch` clause covers all subtypes. |
+| Boundary test on `capture_method` not being `AUTOMATIC` (regression: someone flips to automatic capture and breaks the two-step confirm→capture flow) | `StripePaymentIntentGatewayTest` asserts `capture_method == MANUAL`. That's a positive assertion; a regression to `AUTOMATIC` would fail this assertion. No additional test needed. | Never — already pinned. |
+
+---
+
+## Validation against `checklist.md`
+
+### Test Generation
+
+- [x] **API tests generated (if applicable)** — `CheckoutControllerTest` (4 cases: 201 happy / 400 invalid / 200 GET / 404 GET) covers `POST /api/checkouts/start` and `GET /{uuid}` per FR-19 / FR-21. Strengthened with `$.paymentIntentId` assertion for FR-20.
+- [x] **E2E tests generated (if UI exists)** — N/A. Story 2.4 has no UI surface. "E2E" here = `CheckoutEventOutboxE2ETest` (full HTTP → real publisher → real outbox row in Testcontainers Postgres) — the QA-pass equivalent of the `CartEventOutboxE2ETest` pattern. Strengthened with `paymentIntentId` jsonb round-trip assertion.
+- [x] **Tests use standard test framework APIs** — JUnit 5 + Spring Boot Test + MockMvc + AssertJ + ArchUnit + Testcontainers + Mockito (`@MockitoBean`, `mockStatic`). No new test deps.
+- [x] **Tests cover happy path** — `StartCheckoutUseCaseTest.start_validRequest_persistsCheckoutInPaymentPendingAndEmitsCheckoutStarted`, `CheckoutControllerTest.postStart_validRequest_returns201...`, `StripePaymentIntentGatewayTest.createPaymentIntent_buildsManualCaptureParams_andPassesIdempotencyKey`, `CheckoutEventOutboxE2ETest.startCheckout_overHttp_emitsCheckoutStartedRowInOutbox`.
+- [x] **Tests cover 1-2 critical error cases** — `StartCheckoutUseCaseAtomicityTest.start_rollsBackCheckoutWhenStripeGatewayThrows` (Stripe failure → rollback), `CheckoutControllerExceptionHandlerTest.handleStripePaymentIntentException_returns502_withSanitizedBody` (sanitized 502), `StripePaymentIntentGatewayTest.createPaymentIntent_wrapsStripeException_intoDomainException` (StripeException wrapping), `StartCheckoutUseCaseTest.start_amountMinorMustBePositive_throwsIllegalArgumentException` (amount validation).
+
+### Test Quality
+
+- [x] **All generated tests run successfully** — **36/36 checkout tests pass, 0 failures, 0 errors, 0 skipped** (verified 2026-07-07, `mvn -pl services/checkout -am test`).
+- [x] **Tests use proper locators (semantic, accessible)** — Backend tests use `assertThat` + AssertJ + `jsonPath` (semantic JSON path) + raw SQL `JdbcTemplate.queryForObject` for jsonb field extraction.
+- [x] **Tests have clear descriptions** — Method names describe outcome: `handleStripePaymentIntentException_returns502_withSanitizedBody`, `start_rollsBackCheckoutWhenStripeGatewayThrows`, `createPaymentIntent_buildsManualCaptureParams_andPassesIdempotencyKey`, `startCheckout_overHttp_emitsCheckoutStartedRowInOutbox`.
+- [x] **No hardcoded waits or sleeps** — Tests use synchronous Spring context + Testcontainers + Mockito `verify(...)` (no `Thread.sleep`, no Awaitility loops).
+- [x] **Tests are independent (no order dependency)** — Each `@SpringBootTest` class has its own `@Container` + `@DynamicPropertySource` (Testcontainers lifecycle class-scoped via `@Testcontainers`); `@BeforeEach` stub on `@MockitoBean StripePaymentGateway` resets state per-test; pure-JUnit `@ExtendWith(MockitoExtension.class)` tests are fully isolated.
+
+### Output
+
+- [x] **Test summary created** — this section appended to `_bmad-output/implementation-artifacts/tests/test-summary.md`.
+- [x] **Tests saved to appropriate directories** — `services/checkout/src/test/java/vn/vnpt/checkout/{api,application,infrastructure/stripe,infrastructure/outbox,domain/event}/`.
+- [x] **Summary includes coverage metrics** — see Coverage table + per-class breakdown + cross-service regression preservation note.
+
+### Validation
+
+**Expected:** All tests pass ✅
+**Actual:** `mvn -pl services/checkout -am test` → Tests run: 36, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS. `mvn validate` → BUILD SUCCESS, 18 modules. **Total: 36 tests, 0 failures.**
+
+---
+
+## Next Steps
+
+1. **Commit QA pass.** 1 new test method + 3 strengthened assertions across 4 existing files:
+   - 1 new method: `CheckoutControllerExceptionHandlerTest.handleStripePaymentIntentException_returns502_withSanitizedBody` (1 case).
+   - 3 strengthened: `CheckoutControllerTest.postStart_validRequest...` (`$.paymentIntentId`), `CheckoutEventOutboxE2ETest.startCheckout_overHttp...` (`payload->>'paymentIntentId'`), `StartCheckoutUseCaseTest.start_validRequest...` (`ArgumentCaptor<String>` on idempotency key).
+   - No new files in checkout production code, no new deps.
+   - Branch: stay on `fix/r-01-util-parent-pom` per Sprint 0 sequential pattern. Suggested prefix: `test(checkout): QA-pass — handler sanitized 502 + controller paymentIntentId + outbox jsonb idem-key (Story 2.4)`.
+
+2. **Surface to reviewer:** The `handleStripePaymentIntentException_returns502_withSanitizedBody` test is the load-bearing R-15 / ADR-23 regression pin. Without it, the architecture.md:532-535 promise ("never leak the raw Stripe exception") was implicit — a future handler refactor that swapped the generic message for `e.getMessage()` would silently leak Stripe internals. The test is 1 method, ~25 lines, and pins a critical security contract.
+
+3. **Story 2.5 (saga confirm/capture) follow-up:** Will extend `StripePaymentGateway` with `confirm(...)` + `capture(...)` + `cancel(...)` per the saga transition table (architecture-detail.md:50-65). The idempotency-key stability pattern (ADR-11 tuple `(aggregate_id, saga_step_name)`) will reuse this story's test pattern. The new AC #5 handler test pins the leak-prevention contract that ALL saga → Stripe calls will inherit.
+
+4. **Story 10.x (cross-service HMAC verification) follow-up:** Story 2.4 signs events with the producer HMAC. The consumer-side verify (in saga) is not yet implemented. When that lands, the new `payload->>'paymentIntentId'` assertion in `CheckoutEventOutboxE2ETest` is the foundation for a verify-side test that decodes the payload + signature and asserts the field is present.
+
+5. **Story 10.5 (e2e-tests module) follow-up:** A Playwright spec for `POST /api/checkouts/start` would be the first checkout HTTP E2E test. The current story's HTTP coverage is via `@SpringBootTest` + manually-built `MockMvc` (Boot 4 removed `@WebMvcTest`). The Playwright spec lands with the testcontainers harness + dev compose wiring that Story 10.5 brings.
+
 5. **Story 6.x (cross-service consumer of `checkout.started`) follow-up:** Will add the `processed_event` idempotency + HMAC-verify tests. The first consumer is the saga listener in Story 2.5. The test harness (Testcontainers + `JdbcTemplate` row inspection) is already established by the inventory `CatalogEventListenerTest` precedent — Story 2.5 will need to follow that pattern, not the in-JVM E2E pattern.

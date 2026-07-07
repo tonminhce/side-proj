@@ -49,6 +49,7 @@ class CheckoutEventPublisherTest {
             .status(CheckoutStatus.PAYMENT_PENDING)
             .version(0L)
             .stripeClientSecret("pi_xxx_secret_xxx")
+            .paymentIntentId("pi_xxx")
             .shippingAddress(
                 ShippingAddress.builder()
                     .recipientName("Nguyen Van A")
@@ -97,7 +98,7 @@ class CheckoutEventPublisherTest {
     assertThat(signed.getTenantId()).isEqualTo("default");
     assertThat(signed.getEventId()).isNotNull();
     assertThat(signed.getOccurredAt()).isNotNull();
-    assertThat(signed.getStripeClientSecret()).isEqualTo("pi_xxx_secret_xxx");
+    assertThat(signed.getPaymentIntentId()).isEqualTo("pi_xxx");
     assertThat(signed.getShippingAddress().getCity()).isEqualTo("HCM");
 
     Map<String, String> sigs = sigsCaptor.getValue();
@@ -171,7 +172,7 @@ class CheckoutEventPublisherTest {
             .tenantId(signed.getTenantId())
             .shippingAddress(signed.getShippingAddress())
             .cartLines(signed.getCartLines())
-            .stripeClientSecret(signed.getStripeClientSecret())
+            .paymentIntentId(signed.getPaymentIntentId())
             .signatures(null)
             .build();
 

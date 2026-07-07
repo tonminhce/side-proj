@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vn.vnpt.checkout.domain.exception.CheckoutNotFoundException;
 import vn.vnpt.checkout.domain.exception.CheckoutVersionConflictException;
+import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
 
 /** Checkout-domain exceptions → HTTP. Story 2.3 / FR-19, FR-21. */
 @RestControllerAdvice
@@ -70,5 +71,17 @@ public class CheckoutControllerExceptionHandler {
         .forEach(fe -> details.put(fe.getField(), fe.getDefaultMessage()));
     body.put("details", details);
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+  }
+
+  /** Story 2.4 / FR-20 — never leak the raw Stripe body (architecture.md:532-535). */
+  @ExceptionHandler(StripePaymentIntentException.class)
+  public ResponseEntity<Map<String, Object>> handleStripePaymentIntentException(
+      StripePaymentIntentException e) {
+    log.debug("502/503 stripe payment intent failure");
+    Map<String, Object> body = new HashMap<>();
+    body.put("code", 502);
+    body.put("status", "BAD_GATEWAY");
+    body.put("message", "Payment provider unavailable");
+    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
   }
 }

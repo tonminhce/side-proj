@@ -58,6 +58,7 @@ final class CheckoutMapper {
         .variantId(dto.variantId())
         .sellerId(dto.sellerId())
         .quantity(dto.quantity())
+        .unitPriceMinor(dto.unitPriceMinor())
         .build();
   }
 
@@ -78,6 +79,7 @@ final class CheckoutMapper {
         checkout.getVersion(),
         toDto(checkout.getShippingAddress()),
         checkout.getStripeClientSecret(),
+        checkout.getPaymentIntentId(),
         toInstant(checkout.getCreatedAt()),
         toInstant(checkout.getUpdatedAt()));
   }

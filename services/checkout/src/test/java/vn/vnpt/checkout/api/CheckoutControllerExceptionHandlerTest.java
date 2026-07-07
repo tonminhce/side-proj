@@ -7,10 +7,12 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.stripe.exception.InvalidRequestException;
 import vn.vnpt.checkout.domain.Checkout;
 import vn.vnpt.checkout.domain.CheckoutStatus;
 import vn.vnpt.checkout.domain.exception.CheckoutNotFoundException;
 import vn.vnpt.checkout.domain.exception.CheckoutVersionConflictException;
+import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
 
 /** Story 2.3 / FR-19, FR-21 — exception → HTTP mapping. Direct handler invocation (no MockMvc). */
 class CheckoutControllerExceptionHandlerTest {
@@ -85,5 +87,32 @@ class CheckoutControllerExceptionHandlerTest {
     assertThat(body.get("code")).isEqualTo(400);
     assertThat(body.get("status")).isEqualTo("BAD_REQUEST");
     assertThat(body.get("message")).isEqualTo("cartUuid is required");
+  }
+
+  /**
+   * Story 2.4 / FR-20 / AC #5 — {@link StripePaymentIntentException} must map to 502 with a
+   * sanitized body that NEVER leaks the raw Stripe exception (architecture.md:532-535). The handler
+   * swallows the cause; only the generic "Payment provider unavailable" message reaches the client.
+   */
+  @Test
+  void handleStripePaymentIntentException_returns502_withSanitizedBody() {
+    String rawStripeDetail = "stripe-secret-internal-detail-that-must-not-leak";
+    StripePaymentIntentException ex =
+        new StripePaymentIntentException(
+            "Stripe PaymentIntent creation failed: " + rawStripeDetail,
+            new InvalidRequestException(
+                rawStripeDetail, "param_xxx", "code", "type", 400, new RuntimeException()));
+
+    ResponseEntity<Map<String, Object>> response = handler.handleStripePaymentIntentException(ex);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+    Map<String, Object> body = response.getBody();
+    assertThat(body).isNotNull();
+    assertThat(body.get("code")).isEqualTo(502);
+    assertThat(body.get("status")).isEqualTo("BAD_GATEWAY");
+    assertThat(body.get("message")).isEqualTo("Payment provider unavailable");
+    // The raw Stripe detail MUST NOT appear in the response body (R-15 / ADR-23 / NFR-OBS-5).
+    assertThat(String.valueOf(body.get("message"))).doesNotContain(rawStripeDetail);
+    assertThat(body).doesNotContainKey("details");
   }
 }

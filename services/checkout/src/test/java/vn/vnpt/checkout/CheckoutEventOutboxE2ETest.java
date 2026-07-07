@@ -1,11 +1,15 @@
 package vn.vnpt.checkout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,7 +18,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import vn.vnpt.checkout.application.port.StripePaymentGateway;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -52,8 +58,15 @@ class CheckoutEventOutboxE2ETest {
 
   @Autowired WebApplicationContext wac;
   @Autowired JdbcTemplate jdbc;
+  @MockitoBean StripePaymentGateway stripePaymentGateway;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
+
+  @BeforeEach
+  void stubStripe() {
+    when(stripePaymentGateway.createPaymentIntent(anyLong(), anyString(), anyString()))
+        .thenReturn(new StripePaymentGateway.Result("pi_e2e_test_abc", "pi_e2e_test_abc_secret"));
+  }
 
   private MockMvc mvc() {
     return MockMvcBuilders.webAppContextSetup(wac).build();
@@ -70,8 +83,7 @@ class CheckoutEventOutboxE2ETest {
             + "\"shippingAddress\":{"
             + "\"recipientName\":\"Nguyen Van A\",\"phone\":\"0901234567\","
             + "\"addressLine1\":\"123 Le Loi\",\"city\":\"HCM\",\"province\":\"HCM\",\"country\":\"VN\"},"
-            + "\"cartLines\":[{\"variantId\":1001,\"quantity\":2}],"
-            + "\"stripeClientSecret\":\"pi_xxx_secret_xxx\"}";
+            + "\"cartLines\":[{\"variantId\":1001,\"quantity\":2,\"unitPriceMinor\":50000}]}";
 
     String responseBody =
         mvc()
@@ -114,6 +126,15 @@ class CheckoutEventOutboxE2ETest {
     assertThat(payload).contains("\"userId\"");
     assertThat(payload).contains("\"tenantId\"");
     assertThat(payload).contains("\"aggregateType\"");
+    // Story 2.4 / FR-20 / AC #2 — the checkout.started event payload carries paymentIntentId so
+    // downstream consumers (the saga in 2.5) can drive confirm/capture without a re-lookup.
+    String paymentIntentId =
+        jdbc.queryForObject(
+            "SELECT payload->>'paymentIntentId' FROM outbox"
+                + " WHERE event_type = 'checkout.started' AND aggregate_id = ?",
+            String.class,
+            checkoutUuid);
+    assertThat(paymentIntentId).isEqualTo("pi_e2e_test_abc");
 
     String hmac =
         jdbc.queryForObject(
@@ -135,7 +156,7 @@ class CheckoutEventOutboxE2ETest {
             + "\"shippingAddress\":{"
             + "\"recipientName\":\"Nguyen Van A\",\"phone\":\"0901234567\","
             + "\"addressLine1\":\"123 Le Loi\",\"city\":\"HCM\",\"province\":\"HCM\",\"country\":\"VN\"},"
-            + "\"cartLines\":[{\"variantId\":2002,\"quantity\":1}]}";
+            + "\"cartLines\":[{\"variantId\":2002,\"quantity\":1,\"unitPriceMinor\":75000}]}";
 
     String responseBody =
         mvc()

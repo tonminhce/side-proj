@@ -67,6 +67,13 @@ checkout:
     # ADR-20 producer HMAC secret for checkout.started events. Prod overrides via Vault at
     # secret/events/hmac/checkout. Computed over the JCS-canonical payload in CheckoutEventPublisher.
     hmac-secret: ${CHECKOUT_EVENTS_HMAC_SECRET:dev-only-secret-do-not-use-in-prod}
+  stripe:
+    # Story 2.4 / FR-20 — Stripe API key. Dev uses test-mode key (sk_test_...) only.
+    # Prod overrides via Vault at secret/stripe/<profile> per ADR-18 — no real key in this file.
+    api-key: ${STRIPE_API_KEY:sk_test_dev-placeholder-do-not-use-in-prod}
+    # Default currency for PaymentIntent creation when request omits it. VND has no fractional
+    # unit — Stripe amount is the đồng value.
+    currency-default: ${CHECKOUT_STRIPE_CURRENCY_DEFAULT:VND}
 
 logging:
   level:

@@ -64,7 +64,7 @@ public class CheckoutEventPublisher {
             .tenantId(checkout.getTenantId())
             .shippingAddress(checkout.getShippingAddress())
             .cartLines(cartLines)
-            .stripeClientSecret(checkout.getStripeClientSecret())
+            .paymentIntentId(checkout.getPaymentIntentId())
             .build();
 
     String signature = HmacEventSigner.sign(canonicalize(unsigned), checkoutServiceSecret);
@@ -82,7 +82,7 @@ public class CheckoutEventPublisher {
             .tenantId(unsigned.getTenantId())
             .shippingAddress(unsigned.getShippingAddress())
             .cartLines(unsigned.getCartLines())
-            .stripeClientSecret(unsigned.getStripeClientSecret())
+            .paymentIntentId(unsigned.getPaymentIntentId())
             .signatures(Map.of("hmac_sha256", signature))
             .build();
 

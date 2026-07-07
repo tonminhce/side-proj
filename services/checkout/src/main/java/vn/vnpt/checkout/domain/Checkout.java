@@ -5,8 +5,11 @@ import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,6 +17,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.Persistable;
 import vn.vnpt.checkout.domain.annotation.IgnoreSoftUkAudit;
 import vn.vnpt.util.common.entity.base.BaseEntity;
 
@@ -33,6 +37,10 @@ import vn.vnpt.util.common.entity.base.BaseEntity;
  * <p>{@code cartUuid} is a cross-service reference to {@code cart_db.carts.uuid} with NO FK (database
  * per service, ADR-03). {@code userId} is nullable (guest checkout per FR-19). {@code @Version} gives
  * optimistic concurrency (the saga uses {@code If-Match} headers in Story 2.5 for OPM).
+ *
+ * <p>Implements {@link Persistable} so {@code save()} routes new entities through {@code persist()}
+ * even when the Snowflake UUID is pre-assigned (Story 2.4 / FR-20 AC #4 — the idempotency key
+ * {@code (checkoutUuid, "stripe.payment_intent.create")} must match the persisted UUID).
  */
 @Entity
 @Table(name = "checkouts")
@@ -43,7 +51,26 @@ import vn.vnpt.util.common.entity.base.BaseEntity;
 @AllArgsConstructor
 @Builder
 @EqualsAndHashCode(callSuper = true)
-public class Checkout extends BaseEntity {
+public class Checkout extends BaseEntity implements Persistable<Long> {
+
+  @Transient
+  private boolean isNewFlag = true;
+
+  @PostLoad
+  @PostPersist
+  void markPersisted() {
+    this.isNewFlag = false;
+  }
+
+  @Override
+  public Long getId() {
+    return getUuid();
+  }
+
+  @Override
+  public boolean isNew() {
+    return isNewFlag;
+  }
 
   /** Single-tenant default ({@code "default"}). */
   @Column(name = "tenant_id", nullable = false, length = 64)
@@ -74,6 +101,10 @@ public class Checkout extends BaseEntity {
   /** ADR-20 + Story 2.4 forward-compat passthrough; nullable until Stripe PaymentIntent lands. */
   @Column(name = "stripe_client_secret", columnDefinition = "TEXT")
   private String stripeClientSecret;
+
+  /** Story 2.4 / FR-20 — Stripe {@code pi_...} id from PaymentIntent.create(). Nullable pre-2.4. */
+  @Column(name = "payment_intent_id", length = 64)
+  private String paymentIntentId;
 
   /** Embedded shipping address. */
   @Embedded

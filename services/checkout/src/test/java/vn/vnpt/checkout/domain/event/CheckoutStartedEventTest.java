@@ -37,7 +37,7 @@ class CheckoutStartedEventTest {
                     .country("VN")
                     .build())
             .cartLines(List.of(CartLineSnapshot.builder().variantId(1001L).quantity(2).build()))
-            .stripeClientSecret("pi_xxx_secret_xxx")
+            .paymentIntentId("pi_xxx")
             .signatures(Map.of("hmac_sha256", "sig-value"))
             .build();
 
@@ -54,7 +54,10 @@ class CheckoutStartedEventTest {
     assertThat(((Number) parsed.get("cartUuid")).longValue()).isEqualTo(99L);
     assertThat(parsed.get("userId")).isEqualTo("u-abc-123");
     assertThat(parsed.get("tenantId")).isEqualTo("default");
-    assertThat(parsed.get("stripeClientSecret")).isEqualTo("pi_xxx_secret_xxx");
+    assertThat(parsed.get("paymentIntentId")).isEqualTo("pi_xxx");
+    // client_secret is an R-15 secret and MUST NOT appear in the event payload — it flows only
+    // via the HTTP response for the Stripe Elements iframe handoff.
+    assertThat(parsed).doesNotContainKey("stripeClientSecret");
     @SuppressWarnings("unchecked")
     Map<String, Object> sigs = (Map<String, Object>) parsed.get("signatures");
     assertThat(sigs).containsEntry("hmac_sha256", "sig-value");
@@ -92,10 +95,10 @@ class CheckoutStartedEventTest {
 
     String json = objectMapper.writeValueAsString(event);
 
-    // userId, guestCartId, stripeClientSecret all null → stripped from the wire.
+    // userId, guestCartId, paymentIntentId, signatures all null → stripped from the wire.
     assertThat(json).doesNotContain("\"userId\"");
     assertThat(json).doesNotContain("\"guestCartId\"");
-    assertThat(json).doesNotContain("\"stripeClientSecret\"");
+    assertThat(json).doesNotContain("\"paymentIntentId\"");
     assertThat(json).doesNotContain("\"signatures\"");
   }
 

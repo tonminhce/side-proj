@@ -47,7 +47,10 @@ public class CheckoutStartedEvent {
   String tenantId;
   ShippingAddress shippingAddress;
   List<CartLineSnapshot> cartLines;
-  String stripeClientSecret;
+  /** Story 2.4 / FR-20 — Stripe {@code pi_...} id (non-secret; may be logged). The
+   *  {@code client_secret} is a R-15 / ADR-23 secret and MUST NOT appear in the event payload —
+   *  it flows only via the HTTP response to the BFF for the Stripe Elements iframe handoff. */
+  String paymentIntentId;
 
   /** ADR-20 producer HMAC map. */
   Map<String, String> signatures;

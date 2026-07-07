@@ -24,5 +24,6 @@ public class StartCheckoutRequest {
   String guestCartId;
   ShippingAddress shippingAddress;
   List<CartLineSnapshot> cartLines;
-  String stripeClientSecret;
+  /** ISO 4217 currency code. Story 2.4 / FR-20 — defaults to {@code "VND"} when blank. */
+  String currency;
 }

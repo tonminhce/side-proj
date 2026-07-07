@@ -44,7 +44,7 @@ public class CheckoutController {
             .guestCartId(request.guestCartId())
             .shippingAddress(CheckoutMapper.toDomain(request.shippingAddress()))
             .cartLines(CheckoutMapper.toDomainCartLines(request.cartLines()))
-            .stripeClientSecret(request.stripeClientSecret())
+            .currency(request.currency())
             .build();
 
     Checkout checkout = startCheckoutUseCase.start(applicationRequest);

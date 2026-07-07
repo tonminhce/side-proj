@@ -125,6 +125,16 @@
             <version>1.18.42</version>
             <scope>provided</scope>
         </dependency>
+
+        <!--
+          Stripe SDK — Story 2.4 / FR-20 (CheckoutService owns PaymentIntent creation).
+          // pin: R-12 — version pinned to the latest stable release; do not float.
+        -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>33.1.0</version>
+        </dependency>
     </dependencies>
 
     <build>

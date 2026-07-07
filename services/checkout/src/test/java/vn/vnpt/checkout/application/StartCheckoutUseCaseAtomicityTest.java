@@ -2,6 +2,8 @@ package vn.vnpt.checkout.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,7 +20,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.checkout.CheckoutApplication;
+import vn.vnpt.checkout.application.port.StripePaymentGateway;
 import vn.vnpt.checkout.domain.ShippingAddress;
+import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
 import vn.vnpt.checkout.domain.snapshot.CartLineSnapshot;
 import vn.vnpt.checkout.infrastructure.outbox.CheckoutEventPublisher;
 
@@ -54,6 +58,14 @@ class StartCheckoutUseCaseAtomicityTest {
   @Autowired StartCheckoutUseCase useCase;
   @Autowired JdbcTemplate jdbc;
   @MockitoBean CheckoutEventPublisher publisher;
+  @MockitoBean StripePaymentGateway stripePaymentGateway;
+
+  @org.junit.jupiter.api.BeforeEach
+  void stubStripe() {
+    Mockito
+        .when(stripePaymentGateway.createPaymentIntent(anyLong(), anyString(), anyString()))
+        .thenReturn(new StripePaymentGateway.Result("pi_atomic_abc", "pi_atomic_abc_secret"));
+  }
 
   @Test
   void start_rollsBackCheckoutWhenPublisherThrows() {
@@ -75,7 +87,13 @@ class StartCheckoutUseCaseAtomicityTest {
                     .province("HCM")
                     .country("VN")
                     .build())
-            .cartLines(List.of(CartLineSnapshot.builder().variantId(1001L).quantity(2).build()))
+            .cartLines(
+                List.of(
+                    CartLineSnapshot.builder()
+                        .variantId(1001L)
+                        .quantity(2)
+                        .unitPriceMinor(50_000L)
+                        .build()))
             .build();
 
     assertThatThrownBy(() -> useCase.start(request)).isInstanceOf(IllegalStateException.class);
@@ -83,6 +101,49 @@ class StartCheckoutUseCaseAtomicityTest {
     Integer checkoutRows =
         jdbc.queryForObject(
             "SELECT COUNT(*) FROM checkouts WHERE cart_uuid = 12345", Integer.class);
+    assertThat(checkoutRows).isEqualTo(0);
+
+    Integer outboxRows =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM outbox WHERE event_type = 'checkout.started'", Integer.class);
+    assertThat(outboxRows).isEqualTo(0);
+  }
+
+  /** Story 2.4 / FR-20 / AC #5 — Stripe failure must roll back the checkout row. */
+  @Test
+  void start_rollsBackCheckoutWhenStripeGatewayThrows() {
+    Mockito
+        .when(stripePaymentGateway.createPaymentIntent(anyLong(), anyString(), anyString()))
+        .thenThrow(new StripePaymentIntentException("simulated Stripe failure"));
+
+    StartCheckoutRequest request =
+        StartCheckoutRequest.builder()
+            .cartUuid(54321L)
+            .userId("u-abc-456")
+            .shippingAddress(
+                ShippingAddress.builder()
+                    .recipientName("Nguyen Van B")
+                    .phone("0909876543")
+                    .addressLine1("456 Tran Hung Dao")
+                    .city("HN")
+                    .province("HN")
+                    .country("VN")
+                    .build())
+            .cartLines(
+                List.of(
+                    CartLineSnapshot.builder()
+                        .variantId(2002L)
+                        .quantity(1)
+                        .unitPriceMinor(120_000L)
+                        .build()))
+            .build();
+
+    assertThatThrownBy(() -> useCase.start(request))
+        .isInstanceOf(StripePaymentIntentException.class);
+
+    Integer checkoutRows =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM checkouts WHERE cart_uuid = 54321", Integer.class);
     assertThat(checkoutRows).isEqualTo(0);
 
     Integer outboxRows =

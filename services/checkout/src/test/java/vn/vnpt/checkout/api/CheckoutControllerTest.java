@@ -71,6 +71,7 @@ class CheckoutControllerTest {
             .status(status)
             .version(0L)
             .stripeClientSecret("pi_xxx_secret_xxx")
+            .paymentIntentId("pi_xxx")
             .shippingAddress(
                 ShippingAddress.builder()
                     .recipientName("Nguyen Van A")
@@ -98,14 +99,16 @@ class CheckoutControllerTest {
         "{\"cartUuid\":12345,\"userId\":\"u-abc-123\",\"shippingAddress\":{"
             + "\"recipientName\":\"Nguyen Van A\",\"phone\":\"0901234567\","
             + "\"addressLine1\":\"123 Le Loi\",\"city\":\"HCM\",\"province\":\"HCM\",\"country\":\"VN\"},"
-            + "\"cartLines\":[{\"variantId\":1001,\"quantity\":2}],"
-            + "\"stripeClientSecret\":\"pi_xxx_secret_xxx\"}";
+            + "\"cartLines\":[{\"variantId\":1001,\"quantity\":2,\"unitPriceMinor\":50000}]}";
 
     mvc.perform(post("/api/checkouts/start").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.checkoutId").value(12345))
         .andExpect(jsonPath("$.status").value("PAYMENT_PENDING"))
         .andExpect(jsonPath("$.cartUuid").value(12345))
+        // Story 2.4 / FR-20 / AC #3 — BFF forwards paymentIntentId + clientSecret to the
+        // storefront for the Stripe Elements handoff.
+        .andExpect(jsonPath("$.paymentIntentId").value("pi_xxx"))
         .andExpect(jsonPath("$.stripeClientSecret").value("pi_xxx_secret_xxx"));
   }
 
