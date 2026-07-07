@@ -48,31 +48,6 @@ public class CheckoutControllerExceptionHandler {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
   }
 
-  @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, Object>> handleValidation(IllegalArgumentException e) {
-    log.debug("400 validation: {}", e.getMessage());
-    Map<String, Object> body = new HashMap<>();
-    body.put("code", 400);
-    body.put("status", "BAD_REQUEST");
-    body.put("message", e.getMessage());
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
-  }
-
-  @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<Map<String, Object>> handleBeanValidation(MethodArgumentNotValidException e) {
-    log.debug("400 bean validation: {}", e.getMessage());
-    Map<String, Object> body = new HashMap<>();
-    body.put("code", 400);
-    body.put("status", "BAD_REQUEST");
-    body.put("message", "Validation failed");
-    Map<String, Object> details = new HashMap<>();
-    e.getBindingResult()
-        .getFieldErrors()
-        .forEach(fe -> details.put(fe.getField(), fe.getDefaultMessage()));
-    body.put("details", details);
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
-  }
-
   /** Story 2.4 / FR-20 — never leak the raw Stripe body (architecture.md:532-535). */
   @ExceptionHandler(StripePaymentIntentException.class)
   public ResponseEntity<Map<String, Object>> handleStripePaymentIntentException(

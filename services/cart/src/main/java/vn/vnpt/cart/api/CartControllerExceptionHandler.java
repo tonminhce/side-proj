@@ -62,11 +62,4 @@ public class CartControllerExceptionHandler {
     body.put("details", Map.of("ownerUserId", e.getOwnerUserId()));
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
   }
-
-  @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, Object>> handleValidation(IllegalArgumentException e) {
-    log.debug("400 validation: {}", e.getMessage());
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(Map.of("code", 400, "status", "BAD_REQUEST", "message", e.getMessage()));
-  }
 }

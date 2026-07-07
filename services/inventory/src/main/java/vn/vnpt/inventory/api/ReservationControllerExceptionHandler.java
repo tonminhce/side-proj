@@ -61,13 +61,6 @@ public class ReservationControllerExceptionHandler {
         .body(Map.of("error", "reservation_not_found", "message", e.getMessage()));
   }
 
-  @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, Object>> handleValidation(IllegalArgumentException e) {
-    log.debug("400 validation: {}", e.getMessage());
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(Map.of("error", "validation_error", "message", e.getMessage()));
-  }
-
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<Map<String, Object>> handleDataIntegrity(
       DataIntegrityViolationException e) {
