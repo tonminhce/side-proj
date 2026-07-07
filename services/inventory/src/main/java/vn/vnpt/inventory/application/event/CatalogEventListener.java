@@ -132,7 +132,9 @@ public class CatalogEventListener {
 
   /**
    * Resolve the v1 single-warehouse default. Seeds {@code "HCM-01"} if no warehouse exists yet.
-   * ADR-06 single-warehouse v1 default — Story 1.7 expands to multi-warehouse.
+   * ADR-06 single-warehouse v1 default — Story 1.7 expanded to multi-warehouse; the listener
+   * seeds HCM-01 with region=SOUTH (the v1 default). V005's seeds may have already inserted it;
+   * the {@code save} is a no-op via {@code uq_warehouses_code} when the row exists.
    */
   private Long defaultWarehouseId() {
     List<Warehouse> active = warehouses.findByIsActiveTrueAndIsDeletedFalse();
@@ -140,7 +142,12 @@ public class CatalogEventListener {
       return active.get(0).getUuid();
     }
     Warehouse seeded =
-        warehouses.save(Warehouse.builder().code("HCM-01").displayName("Ho Chi Minh").build());
+        warehouses.save(
+            Warehouse.builder()
+                .code("HCM-01")
+                .displayName("Ho Chi Minh")
+                .region(vn.vnpt.inventory.domain.Region.SOUTH)
+                .build());
     return seeded.getUuid();
   }
 }

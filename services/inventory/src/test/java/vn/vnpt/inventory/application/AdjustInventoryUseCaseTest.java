@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
@@ -67,7 +68,7 @@ class AdjustInventoryUseCaseTest {
     new JdbcTemplate(dataSource).execute("TRUNCATE TABLE inventory_reservation, inventory_ledger, warehouses RESTART IDENTITY");
     Warehouse seeded =
         warehouseRepository.save(
-            Warehouse.builder().code("HCM-01-UC-" + System.nanoTime()).displayName("Ho Chi Minh").build());
+            Warehouse.builder().code("HCM-01-UC-" + System.nanoTime()).displayName("Ho Chi Minh").region(Region.SOUTH).build());
     warehouseId = seeded.getUuid();
   }
 

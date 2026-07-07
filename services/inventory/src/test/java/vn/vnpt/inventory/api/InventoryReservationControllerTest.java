@@ -1,5 +1,6 @@
 package vn.vnpt.inventory.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
@@ -186,5 +187,136 @@ class InventoryReservationControllerTest {
                 .content(body))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").value("validation_error"));
+  }
+
+  /**
+   * Story 1.7 / FR-10 — caller supplies {@code shippingRegion} only (no warehouseId); the
+   * picker resolves it. The use case receives a command with {@code shippingRegion} set.
+   */
+  @Test
+  void post_withShippingRegion_returns201OnPickedWarehouse() throws Exception {
+    InventoryReservation reservation = new InventoryReservation();
+    reservation.setUuid(99L);
+    reservation.setVariantId(100L);
+    reservation.setWarehouseId(42L);
+    reservation.setQuantity(5L);
+    reservation.setStatus(ReservationStatus.ACTIVE);
+    reservation.setExpiresAt(Instant.parse("2030-01-01T00:00:00Z"));
+    java.lang.reflect.Field ssField = InventoryReservation.class.getDeclaredField("sagaStepId");
+    ssField.setAccessible(true);
+    ssField.set(reservation, "step-region-1");
+    reservation.setOrderUuid(7L);
+    reservation.setCreatedAt(LocalDateTime.now());
+    reservation.setTenantId("default");
+    when(reserveInventoryUseCase.reserve(any())).thenReturn(reservation);
+
+    String body =
+        """
+        {
+          "variantId": 100,
+          "shippingRegion": "SOUTH",
+          "quantity": 5,
+          "sagaStepId": "step-region-1"
+        }
+        """;
+    mvc.perform(
+            post("/api/inventory-reservations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.warehouseId").value(42));
+  }
+
+  /** Story 1.7 — XOR violation (both warehouseId and shippingRegion) returns 400. */
+  @Test
+  void post_withBothFields_returns400() throws Exception {
+    doThrow(new IllegalArgumentException("exactly one of warehouseId, shippingRegion required"))
+        .when(reserveInventoryUseCase)
+        .reserve(any());
+
+    String body =
+        """
+        {
+          "variantId": 100,
+          "warehouseId": 1,
+          "shippingRegion": "SOUTH",
+          "quantity": 1,
+          "sagaStepId": "step-both-1"
+        }
+        """;
+    mvc.perform(
+            post("/api/inventory-reservations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").value("validation_error"));
+  }
+
+  /** Story 1.7 — unknown region string returns 400 (controller maps via Region.valueOf). */
+  @Test
+  void post_withInvalidRegion_returns400() throws Exception {
+    String body =
+        """
+        {
+          "variantId": 100,
+          "shippingRegion": "FOO",
+          "quantity": 1,
+          "sagaStepId": "step-bad-region-1"
+        }
+        """;
+    mvc.perform(
+            post("/api/inventory-reservations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").value("validation_error"))
+        .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Unknown region")));
+  }
+
+  /**
+   * Gap coverage — controller defensively upper-cases the region string before {@link
+   * Region#valueOf}. Caller sends {@code "south"}; the picker dispatch receives {@code SOUTH}.
+   * No mock-use-case setup needed — the controller just parses + forwards.
+   */
+  @Test
+  void post_withLowercaseRegion_parsesAndForwards() throws Exception {
+    InventoryReservation reservation = new InventoryReservation();
+    reservation.setUuid(77L);
+    reservation.setVariantId(100L);
+    reservation.setWarehouseId(33L);
+    reservation.setQuantity(2L);
+    reservation.setStatus(ReservationStatus.ACTIVE);
+    reservation.setExpiresAt(Instant.parse("2030-01-01T00:00:00Z"));
+    java.lang.reflect.Field ssField = InventoryReservation.class.getDeclaredField("sagaStepId");
+    ssField.setAccessible(true);
+    ssField.set(reservation, "step-lower-region");
+    reservation.setOrderUuid(null);
+    reservation.setCreatedAt(LocalDateTime.now());
+    reservation.setTenantId("default");
+    when(reserveInventoryUseCase.reserve(any())).thenReturn(reservation);
+
+    String body =
+        """
+        {
+          "variantId": 100,
+          "shippingRegion": "south",
+          "quantity": 2,
+          "sagaStepId": "step-lower-region"
+        }
+        """;
+    mvc.perform(
+            post("/api/inventory-reservations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.warehouseId").value(33));
+
+    // Capture the command the controller forwarded — verify Region.SOUTH made it through.
+    org.mockito.ArgumentCaptor<vn.vnpt.inventory.application.ReserveInventoryCommand> captor =
+        org.mockito.ArgumentCaptor.forClass(
+            vn.vnpt.inventory.application.ReserveInventoryCommand.class);
+    org.mockito.Mockito.verify(reserveInventoryUseCase).reserve(captor.capture());
+    assertThat(captor.getValue().shippingRegion())
+        .isEqualTo(vn.vnpt.inventory.domain.Region.SOUTH);
   }
 }

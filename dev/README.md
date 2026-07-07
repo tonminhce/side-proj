@@ -74,6 +74,8 @@ A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthchec
 
 `inventory_reservation` table — Saga-initiated reservations for cart checkout (Story 1.6). TTL=15min, sweeper emits `inventory.released` for expired rows.
 
+`warehouses.region` column + HCM-01 (`SOUTH`) + HN-01 (`NORTH`) seed rows — FR-10 multi-warehouse dispatch picks the in-region warehouse with enough stock; cross-region fallback emits a WARN log (Story 1.7).
+
 On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
 
 ## Read admin view (Story 1.4 / FR-6)

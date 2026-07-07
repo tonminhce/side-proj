@@ -2,6 +2,8 @@ package vn.vnpt.inventory.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +14,8 @@ import lombok.Setter;
 import vn.vnpt.util.common.entity.base.BaseEntity;
 
 /**
- * Warehouse aggregate — Story 1.5 / FR-8, ADR-06 (single-warehouse v1 default).
+ * Warehouse aggregate — Story 1.5 / FR-8, ADR-06 (single-warehouse v1 default). Extended in
+ * Story 1.7 / FR-10 with a {@code region} routing key.
  *
  * <p>Represents a physical warehouse. The {@code code} field is the admin-managed slug
  * ({@code "HCM-01"}, {@code "HN-01"}) used in admin UIs and API contracts; the {@code uuid}
@@ -38,4 +41,14 @@ public class Warehouse extends BaseEntity {
   /** Human-readable name for the admin UI. */
   @Column(name = "display_name", nullable = false, length = 255)
   private String displayName;
+
+  /**
+   * FR-10 dispatch key. Hibernate maps the enum constant's {@code name()} directly to the
+   * VARCHAR(16) column ({@code NORTH}, {@code SOUTH}, {@code CENTRAL}). The DB-level CHECK
+   * constraint {@code chk_warehouses_region} enforces the same set. Adding a region is a
+   * code change, not a migration.
+   */
+  @Column(name = "region", nullable = false, length = 16)
+  @Enumerated(EnumType.STRING)
+  private Region region;
 }

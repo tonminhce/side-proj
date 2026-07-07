@@ -15,7 +15,7 @@ import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepositor
 
 /**
  * Modulith package-boundary enforcement for InventoryService (Story 1.5 / AC #23; extended in
- * Story 1.6 / FR-9 with 2 new rules).
+ * Story 1.6 / FR-9 with 2 new rules, Story 1.7 / FR-10 with 1 new rule).
  *
  * <p>Rules:
  *
@@ -41,6 +41,9 @@ import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepositor
  *       guard. {@code ReserveInventoryUseCase} and {@code ReleaseInventoryUseCase} MUST be
  *       {@code @Transactional} at the class level so the business state + outbox insert are
  *       atomic.
+ *   <li>{@link #inventory_pickerUsesOnlyOwnRepositories()} — Story 1.7 / FR-10: the picker
+ *       must reference only its own service's repositories (no cross-service drift via future
+ *       saga-step or catalog imports).
  * </ol>
  */
 class InventoryPackageBoundaryTest {
@@ -150,5 +153,48 @@ class InventoryPackageBoundaryTest {
             new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
                 .importPackages("vn.vnpt.inventory"));
+  }
+
+  /**
+   * Story 1.7 / FR-10 — the picker is a read-only dispatch use case. Its declared dependencies
+   * must be limited to its own service's repositories. Soft guard: a future dev adding a
+   * saga-step or catalog import to the picker fails this test.
+   */
+  @Test
+  void inventory_pickerUsesOnlyOwnRepositories() {
+    // Reflection-based check matching the existing append-only pattern. Walk declared fields
+    // of PickWarehouseForReservationUseCase and reject any whose raw type lives outside the
+    // allow-list. PONYTAIL: mirror Story 1.5's inventory_writesOnlyToInventoryLedger style —
+    // app-level reflection is fine for a soft boundary guard; a future hardening story can
+    // graduate this to ArchUnit's stricter field-access predicate.
+    Class<?> picker = loadPickerClass();
+    for (java.lang.reflect.Field field : picker.getDeclaredFields()) {
+      String owner = field.getType().getName();
+      boolean allowed =
+          owner.startsWith("vn.vnpt.inventory.")
+              || owner.startsWith("vn.vnpt.util.")
+              || owner.startsWith("org.slf4j.")
+              || owner.startsWith("lombok.")
+              || owner.startsWith("org.springframework.beans.factory.annotation.")
+              || owner.equals("org.springframework.transaction.annotation.Transactional")
+              || owner.equals("lombok.RequiredArgsConstructor")
+              || owner.equals("lombok.extern.slf4j.Slf4j");
+      if (!allowed) {
+        throw new AssertionError(
+            "PickWarehouseForReservationUseCase field '"
+                + field.getName()
+                + "' has type '"
+                + owner
+                + "' which is outside the picker repository allow-list");
+      }
+    }
+  }
+
+  private static Class<?> loadPickerClass() {
+    try {
+      return Class.forName("vn.vnpt.inventory.application.PickWarehouseForReservationUseCase");
+    } catch (ClassNotFoundException e) {
+      throw new AssertionError("PickWarehouseForReservationUseCase class not found", e);
+    }
   }
 }

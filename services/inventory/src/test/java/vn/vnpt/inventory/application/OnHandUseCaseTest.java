@@ -16,6 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.application.query.OnHandView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
 import vn.vnpt.inventory.infrastructure.repository.WarehouseRepository;
@@ -59,7 +60,7 @@ class OnHandUseCaseTest {
   void findOnHand_returnsAggregatedView() {
     long warehouseId =
         warehouseRepository.save(
-                Warehouse.builder().code("HCM-01-UC-" + System.nanoTime()).displayName("Ho Chi Minh").build())
+                Warehouse.builder().code("HCM-01-UC-" + System.nanoTime()).displayName("Ho Chi Minh").region(Region.SOUTH).build())
             .getUuid();
 
     ledgerRepository.save(entry(100L, warehouseId, 5L, 1L));
@@ -87,7 +88,7 @@ class OnHandUseCaseTest {
                 Warehouse.builder()
                     .code("HCM-A-" + System.nanoTime())
                     .displayName("Ho Chi Minh A")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
     long warehouseB =
         warehouseRepository
@@ -95,7 +96,7 @@ class OnHandUseCaseTest {
                 Warehouse.builder()
                     .code("HN-B-" + System.nanoTime())
                     .displayName("Ha Noi B")
-                    .build())
+                    .region(Region.NORTH).build())
             .getUuid();
 
     ledgerRepository.save(entry(100L, warehouseA, 5L, 1L));

@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.InventoryReservation;
 import vn.vnpt.inventory.domain.ReservationStatus;
@@ -73,7 +74,7 @@ class ReleaseInventoryUseCaseTest {
                 Warehouse.builder()
                     .code("HCM-01-REL-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 
@@ -94,7 +95,7 @@ class ReleaseInventoryUseCaseTest {
     InventoryReservation reservation =
         reserveUseCase.reserve(
             new ReserveInventoryCommand(
-                500L, warehouseId, 2L, sagaStepId, null, Duration.ofMinutes(15)));
+                500L, warehouseId, null, 2L, sagaStepId, null, Duration.ofMinutes(15)));
 
     releaseUseCase.release(sagaStepId);
 
@@ -143,7 +144,7 @@ class ReleaseInventoryUseCaseTest {
     String sagaStepId = "step-twice-" + System.nanoTime();
     reserveUseCase.reserve(
         new ReserveInventoryCommand(
-            700L, warehouseId, 1L, sagaStepId, null, Duration.ofMinutes(15)));
+            700L, warehouseId, null, 1L, sagaStepId, null, Duration.ofMinutes(15)));
     releaseUseCase.release(sagaStepId);
 
     // Second release call: terminal-state guard → no second ledger row.
@@ -174,6 +175,7 @@ class ReleaseInventoryUseCaseTest {
             new ReserveInventoryCommand(
                 600L,
                 warehouseId,
+                null,
                 1L,
                 "step-rel-exp-" + System.nanoTime(),
                 null,

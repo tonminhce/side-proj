@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryReservation;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.ReservationStatus;
 import vn.vnpt.inventory.domain.Warehouse;
 
@@ -63,7 +64,7 @@ class InventoryReservationRepositoryTest {
                 Warehouse.builder()
                     .code("HCM-01-REPO-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 

@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.application.query.OnHandView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.Warehouse;
 
 /**
@@ -65,7 +66,7 @@ class InventoryLedgerEntryRepositoryTest {
             Warehouse.builder()
                 .code("HCM-LEDGER-" + System.nanoTime())
                 .displayName("Ho Chi Minh")
-                .build());
+                .region(Region.SOUTH).build());
     warehouseId = seeded.getUuid();
   }
 

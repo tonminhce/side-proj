@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
@@ -72,7 +73,7 @@ class ReservationSweeperJobTest {
                 Warehouse.builder()
                     .code("HCM-01-SWEEP-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 
@@ -94,6 +95,7 @@ class ReservationSweeperJobTest {
           new ReserveInventoryCommand(
               700L,
               warehouseId,
+              null,
               1L,
               "step-sweep-" + i + "-" + System.nanoTime(),
               null,

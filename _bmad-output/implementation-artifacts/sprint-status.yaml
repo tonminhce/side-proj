@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # dev-story 1-6 — atomic reservation + TTL sweeper + ADR-20 producer HMAC; concurrent 100x regression guard green; ready for review
+last_updated: 2026-07-07  # dev-story 1-7 — multi-warehouse per-variant stock (FR-10/ADR-06 stretch); region dispatch + per-warehouse breakdown GET; review
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -38,7 +38,7 @@ development_status:
   1-4-admin-ui-catalog-read-view-fr-6-fr-7: done  # story-automator review — HIGH BFF tenant bug fixed; tests +2 catalog +3 frontend documented
   1-5-inventoryservice-per-warehouse-ledger-fr-8: done  # story-automator review — CRITICAL CatalogEventListenerTest discovery bug + @Transactional REQUIRES_NEW fixed; tests 35/35; util baseline 57/57 preserved
   1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause: done  # story-automator review — 4 HIGH fixed (findAvailable double-count, ADR-11 idempotency race in reserve, 2 stale JavaDocs); 3 MEDIUM fixed (controller test dead code, sweeper unusedPageRequest, idempotency_conflict body missing sagaStepId); 2 LOW fixed (sweeper log count, smoke script clarity); 0 CRITICAL remain
-  1-7-multi-warehouse-per-variant-stock-fr-10: backlog
+  1-7-multi-warehouse-per-variant-stock-fr-10: done  # story-automator review — 1 LOW fixed (OnHandUseCaseTest HN-B region SOUTH→NORTH); 188 inventory tests green (actual surefire count; +100 from @RepeatedTest); util 57/57 preserved; 17 modules preserved; 5/5 boundary rules
   1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: backlog
   epic-1-retrospective: optional
   epic-2: backlog  # Epic 2: Add to Cart and Checkout

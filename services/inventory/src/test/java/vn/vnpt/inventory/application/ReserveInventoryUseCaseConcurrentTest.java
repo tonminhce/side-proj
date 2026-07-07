@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.domain.exception.InsufficientStockException;
@@ -81,7 +82,7 @@ class ReserveInventoryUseCaseConcurrentTest {
                 Warehouse.builder()
                     .code("HCM-01-CONC-" + System.nanoTime())
                     .displayName("Ho Chi Minh Concurrent")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
 
     // Seed exactly on_hand = 1.
@@ -114,7 +115,7 @@ class ReserveInventoryUseCaseConcurrentTest {
                 startGate.await();
                 useCase.reserve(
                     new ReserveInventoryCommand(
-                        900L, warehouseId, 1L, stepA, null, Duration.ofMinutes(15)));
+                        900L, warehouseId, null, 1L, stepA, null, Duration.ofMinutes(15)));
                 successCount.incrementAndGet();
               } catch (InsufficientStockException expected) {
                 insufficientCount.incrementAndGet();
@@ -130,7 +131,7 @@ class ReserveInventoryUseCaseConcurrentTest {
                 startGate.await();
                 useCase.reserve(
                     new ReserveInventoryCommand(
-                        900L, warehouseId, 1L, stepB, null, Duration.ofMinutes(15)));
+                        900L, warehouseId, null, 1L, stepB, null, Duration.ofMinutes(15)));
                 successCount.incrementAndGet();
               } catch (InsufficientStockException expected) {
                 insufficientCount.incrementAndGet();

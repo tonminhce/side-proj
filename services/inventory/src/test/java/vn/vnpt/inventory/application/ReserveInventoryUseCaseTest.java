@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.InventoryReservation;
 import vn.vnpt.inventory.domain.ReservationStatus;
@@ -76,7 +77,7 @@ class ReserveInventoryUseCaseTest {
                 Warehouse.builder()
                     .code("HCM-01-RES-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 
@@ -98,6 +99,7 @@ class ReserveInventoryUseCaseTest {
             new ReserveInventoryCommand(
                 100L,
                 warehouseId,
+                null,
                 3L,
                 "step-happy-" + System.nanoTime(),
                 42L,
@@ -151,11 +153,11 @@ class ReserveInventoryUseCaseTest {
     InventoryReservation first =
         useCase.reserve(
             new ReserveInventoryCommand(
-                200L, warehouseId, 1L, sagaStepId, null, Duration.ofMinutes(15)));
+                200L, warehouseId, null, 1L, sagaStepId, null, Duration.ofMinutes(15)));
     InventoryReservation second =
         useCase.reserve(
             new ReserveInventoryCommand(
-                200L, warehouseId, 1L, sagaStepId, null, Duration.ofMinutes(15)));
+                200L, warehouseId, null, 1L, sagaStepId, null, Duration.ofMinutes(15)));
 
     // Same saga_step_id → same reservation row.
     assertThat(second.getUuid()).isEqualTo(first.getUuid());
@@ -177,6 +179,7 @@ class ReserveInventoryUseCaseTest {
                     new ReserveInventoryCommand(
                         100L,
                         warehouseId,
+                        null,
                         0L,
                         "step-qty-zero-" + System.nanoTime(),
                         null,
@@ -193,6 +196,7 @@ class ReserveInventoryUseCaseTest {
                     new ReserveInventoryCommand(
                         100L,
                         warehouseId,
+                        null,
                         -1L,
                         "step-qty-neg-" + System.nanoTime(),
                         null,
@@ -206,11 +210,7 @@ class ReserveInventoryUseCaseTest {
     assertThatThrownBy(
             () ->
                 useCase.reserve(
-                    new ReserveInventoryCommand(
-                        100L,
-                        warehouseId,
-                        1L,
-                        "  ",
+                    new ReserveInventoryCommand(100L, warehouseId, null, 1L, "  ",
                         null,
                         Duration.ofMinutes(15))))
         .isInstanceOf(IllegalArgumentException.class)
@@ -223,7 +223,7 @@ class ReserveInventoryUseCaseTest {
             () ->
                 useCase.reserve(
                     new ReserveInventoryCommand(
-                        100L, warehouseId, 1L, "step-ttl-neg-" + System.nanoTime(), null,
+                        100L, warehouseId, null, 1L, "step-ttl-neg-" + System.nanoTime(), null,
                         Duration.ofMinutes(-1))))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("ttl");
@@ -237,6 +237,7 @@ class ReserveInventoryUseCaseTest {
                     new ReserveInventoryCommand(
                         100L,
                         9_999_999L,
+                        null,
                         1L,
                         "step-wh-nf-" + System.nanoTime(),
                         null,
@@ -262,6 +263,7 @@ class ReserveInventoryUseCaseTest {
                     new ReserveInventoryCommand(
                         300L,
                         warehouseId,
+                        null,
                         5L,
                         "step-insufficient-" + System.nanoTime(),
                         null,

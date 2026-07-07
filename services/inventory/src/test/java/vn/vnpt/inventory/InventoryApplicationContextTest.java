@@ -92,6 +92,35 @@ class InventoryApplicationContextTest {
     assertThat(count).isEqualTo(1);
   }
 
+  /** Story 1.7 — Flyway MUST have applied V005 (warehouses.region column + seeds). */
+  @Test
+  void flywayAppliedV005() {
+    Integer count =
+        new JdbcTemplate(dataSource)
+            .queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '005'", Integer.class);
+    assertThat(count).isEqualTo(1);
+  }
+
+  /**
+   * Story 1.7 — V005 seeds HCM-01 (region=SOUTH) + HN-01 (region=NORTH). Migration's intent
+   * is to give FR-10 dispatch two real warehouses to pick from. A regression that drops the
+   * INSERTs (or ships the wrong region) breaks the dev smoke; this test catches it at the
+   * Spring context boot.
+   */
+  @Test
+  void v005SeedsHcmAndHnWithCorrectRegions() {
+    Map<String, String> regions =
+        new JdbcTemplate(dataSource)
+            .queryForList(
+                "SELECT code, region::text AS region FROM warehouses WHERE code IN ('HCM-01', 'HN-01')")
+            .stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    row -> (String) row.get("code"), row -> (String) row.get("region")));
+    assertThat(regions).containsEntry("HCM-01", "SOUTH").containsEntry("HN-01", "NORTH");
+  }
+
   /** V001 MUST create the canonical 4 business tables + Flyway's bookkeeping table; Story 1.6 adds inventory_reservation via V003. */
   @Test
   void allExpectedTablesExist() {
@@ -144,19 +173,21 @@ class InventoryApplicationContextTest {
     Long whA =
         ((Number)
                 jdbc.queryForMap(
-                    "INSERT INTO warehouses (uuid, code, display_name) VALUES (?, ?, ?) RETURNING uuid",
+                    "INSERT INTO warehouses (uuid, code, display_name, region) VALUES (?, ?, ?, ?) RETURNING uuid",
                     System.nanoTime(),
                     "VIEW-A-" + System.nanoTime(),
-                    "View A")
+                    "View A",
+                    "SOUTH")
             .get("uuid"))
             .longValue();
     Long whB =
         ((Number)
                 jdbc.queryForMap(
-                    "INSERT INTO warehouses (uuid, code, display_name) VALUES (?, ?, ?) RETURNING uuid",
+                    "INSERT INTO warehouses (uuid, code, display_name, region) VALUES (?, ?, ?, ?) RETURNING uuid",
                     System.nanoTime(),
                     "VIEW-B-" + System.nanoTime(),
-                    "View B")
+                    "View B",
+                    "NORTH")
             .get("uuid"))
             .longValue();
     jdbc.update(

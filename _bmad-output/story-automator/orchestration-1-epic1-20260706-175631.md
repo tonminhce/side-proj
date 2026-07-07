@@ -54,7 +54,7 @@ completedSessions: []
 | 1.3 | done | done | done | done | - | complete |
 | 1.4 | done | done | done | done | - | complete |
 | 1.5 | done | done | done | done | - | complete |
-| 1.6 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | pending |
+| 1.6 | done | done | done | done | - | complete |
 | 1.7 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | pending |
 | 1.8 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | pending |
 
@@ -75,3 +75,4 @@ completedSessions: []
 - **[2026-07-06T19:40:44Z]** Story 1.3: complete (Avro strict-compat change events with HMAC)
 - **[2026-07-06T20:36:06Z]** Story 1.4: complete (Admin UI catalog read view)
 - **[2026-07-06T21:54:36Z]** Story 1.5: complete + pushed (f813fba)
+- **[2026-07-06T23:43:46Z]** Story 1.6: complete + pushed (5a2e0e5)

@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.application.query.AvailableStockView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
@@ -68,7 +69,7 @@ class OnHandAvailableStockTest {
                 Warehouse.builder()
                     .code("HCM-01-AV-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 
@@ -94,7 +95,7 @@ class OnHandAvailableStockTest {
     // The ledger already reflects the reservation, so no double-counting.
     reserveUseCase.reserve(
         new ReserveInventoryCommand(
-            950L, warehouseId, 3L, "step-av-1-" + System.nanoTime(), null, Duration.ofMinutes(15)));
+            950L, warehouseId, null, 3L, "step-av-1-" + System.nanoTime(), null, Duration.ofMinutes(15)));
 
     AvailableStockView after = onHandUseCase.findAvailable(950L, warehouseId).orElseThrow();
     assertThat(after.onHand()).isEqualTo(7L);

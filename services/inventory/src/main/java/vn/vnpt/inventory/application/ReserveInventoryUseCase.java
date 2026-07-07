@@ -27,29 +27,30 @@ import vn.vnpt.util.events.JcsCanonicalJson;
 
 /**
  * ReserveInventoryUseCase — Story 1.6 / FR-9 (DI-01 root-cause fix), ADR-04, ADR-11, ADR-12,
- * ADR-20.
+ * ADR-20. Extended in Story 1.7 / FR-10 with region-based warehouse dispatch.
  *
  * <p>Atomic per-row reservation with Postgres {@code SELECT … FOR UPDATE}. Steps:
  *
  * <ol>
  *   <li>Validate input (quantity, sagaStepId, ttl).
+ *   <li>Validate warehouse-dispatch XOR (warehouseId / shippingRegion) — exactly one non-null.
+ *   <li>Resolve {@code warehouseId}: if null, call {@link PickWarehouseForReservationUseCase}
+ *       with the shipping region; the picker returns the best in-region warehouse (or
+ *       cross-region fallback) with enough stock.
  *   <li>Validate warehouse exists.
  *   <li><b>ADR-11 idempotency:</b> same {@code saga_step_id} returns the existing reservation.
  *   <li>Acquire {@code FOR UPDATE} lock on {@code inventory_ledger} rows for the pair.
- *   <li>Compute {@code available = onHand - SUM(active reservations)}. If
+ *   <li>ADR-11 idempotency re-check inside the lock.
+ *   <li>Compute {@code available = onHand} ({@code SUM(delta)} — Story 1.6 Issue 9 fix). If
  *       {@code available < requested}, throw {@link InsufficientStockException} (409).
  *   <li>Insert {@code inventory_reservation} row (status=ACTIVE, expiresAt=now+ttl).
  *   <li>Append {@code inventory_ledger} row with {@code reason='reserve', delta=-qty}.
  *   <li>Emit outbox row with HMAC signature (producer-side ADR-20).
  * </ol>
  *
- * <p>The {@code @Transactional} boundary owns the critical section. ADR-11 idempotency check
- * runs INSIDE this boundary so the check + lock + insert are atomic.
- *
- * <p>The {@code FOR UPDATE} row lock on {@code inventory_ledger} serializes concurrent
- * reservations for the same {@code (variant, warehouse)}. The first commit decrements
- * {@code on_hand} + inserts the reservation; the second's {@code FOR UPDATE} waits, then
- * re-reads and sees the decremented state, returning 409.
+ * <p>The picker dispatch runs BEFORE the idempotency check; on a saga retry with the same
+ * {@code saga_step_id} the pre-lock idempotency check returns the existing reservation and the
+ * FOR UPDATE is skipped — picker result is discarded. This preserves the ADR-11 guarantee.
  */
 @Service
 @Transactional
@@ -62,6 +63,7 @@ public class ReserveInventoryUseCase {
   private final WarehouseRepository warehouseRepository;
   private final OutboxPublisher outbox;
   private final ObjectMapper objectMapper;
+  private final PickWarehouseForReservationUseCase pickWarehouseUseCase;
 
   @Value("${inventory.events.hmac-secret}")
   private String inventoryServiceSecret;
@@ -73,16 +75,32 @@ public class ReserveInventoryUseCase {
    * Reserve {@code quantity} units for a saga step. Idempotent on {@code sagaStepId}: same
    * {@code saga_step_id} returns the existing reservation with no side-effects.
    *
-   * @throws IllegalArgumentException for invalid input (quantity, sagaStepId, ttl)
+   * @throws IllegalArgumentException for invalid input (quantity, sagaStepId, ttl, dispatch XOR)
    * @throws WarehouseNotFoundException if {@code warehouseId} does not exist
    * @throws InsufficientStockException if available stock {@code < requested}
    */
   public InventoryReservation reserve(ReserveInventoryCommand cmd) {
     validate(cmd);
+    validateWarehouseDispatch(cmd);
+
+    // FR-10 dispatch: when caller supplies only shippingRegion, pick the best in-region
+    // (or cross-region fallback) warehouse with enough stock. The picker result is cached
+    // so the rest of the use case is byte-identical to Story 1.6 (uses `resolvedWarehouseId`
+    // everywhere — not `cmd.warehouseId()` directly).
+    Long pickerPick =
+        cmd.warehouseId() == null
+            ? pickWarehouseUseCase
+                .pickWarehouseId(cmd.variantId(), cmd.shippingRegion(), cmd.quantity())
+                .orElseThrow(
+                    () ->
+                        new InsufficientStockException(
+                            cmd.variantId(), null, cmd.quantity(), 0L))
+            : null;
+    final Long resolvedWarehouseId = cmd.warehouseId() != null ? cmd.warehouseId() : pickerPick;
 
     warehouseRepository
-        .findById(cmd.warehouseId())
-        .orElseThrow(() -> new WarehouseNotFoundException(cmd.warehouseId()));
+        .findById(resolvedWarehouseId)
+        .orElseThrow(() -> new WarehouseNotFoundException(resolvedWarehouseId));
 
     // ADR-11 idempotency: same saga_step_id returns the same reservation.
     var existing = reservationRepository.findBySagaStepId(cmd.sagaStepId());
@@ -91,7 +109,7 @@ public class ReserveInventoryUseCase {
     }
 
     // FR-9 lock: serialize concurrent reserves for the same (variant, warehouse).
-    ledgerRepository.lockLedgerByVariantAndWarehouse(cmd.variantId(), cmd.warehouseId());
+    ledgerRepository.lockLedgerByVariantAndWarehouse(cmd.variantId(), resolvedWarehouseId);
 
     // ADR-11 idempotency re-check inside the lock: a concurrent request with the same
     // saga_step_id may have committed between our pre-lock check and lock acquisition.
@@ -107,13 +125,13 @@ public class ReserveInventoryUseCase {
     // transaction (the FOR UPDATE serializes them).
     long available =
         ledgerRepository
-            .findAvailable(cmd.variantId(), cmd.warehouseId())
+            .findAvailable(cmd.variantId(), resolvedWarehouseId)
             .map(AvailableStockView::available)
             .orElse(0L);
 
     if (available < cmd.quantity()) {
       throw new InsufficientStockException(
-          cmd.variantId(), cmd.warehouseId(), cmd.quantity(), available);
+          cmd.variantId(), resolvedWarehouseId, cmd.quantity(), available);
     }
 
     Duration ttl = cmd.ttl() != null ? cmd.ttl() : Duration.ofMinutes(defaultTtlMinutes);
@@ -123,7 +141,7 @@ public class ReserveInventoryUseCase {
         reservationRepository.save(
             InventoryReservation.builder()
                 .variantId(cmd.variantId())
-                .warehouseId(cmd.warehouseId())
+                .warehouseId(resolvedWarehouseId)
                 .quantity(cmd.quantity())
                 .status(ReservationStatus.ACTIVE)
                 .expiresAt(expiresAt)
@@ -136,7 +154,7 @@ public class ReserveInventoryUseCase {
     ledgerRepository.save(
         InventoryLedgerEntry.builder()
             .variantId(cmd.variantId())
-            .warehouseId(cmd.warehouseId())
+            .warehouseId(resolvedWarehouseId)
             .delta(-cmd.quantity())
             .reason(InventoryReason.RESERVE.toColumnValue())
             .eventId(ledgerEventId)
@@ -147,7 +165,7 @@ public class ReserveInventoryUseCase {
         new InventoryReserved(
             reservation.getUuid(),
             cmd.variantId(),
-            cmd.warehouseId(),
+            resolvedWarehouseId,
             cmd.quantity(),
             cmd.sagaStepId(),
             cmd.orderUuid(),
@@ -168,7 +186,7 @@ public class ReserveInventoryUseCase {
     log.debug(
         "Reserved: variantId={} warehouseId={} qty={} sagaStepId={} reservationUuid={}",
         cmd.variantId(),
-        cmd.warehouseId(),
+        resolvedWarehouseId,
         cmd.quantity(),
         cmd.sagaStepId(),
         reservation.getUuid());
@@ -195,6 +213,22 @@ public class ReserveInventoryUseCase {
     }
     if (cmd.ttl() != null && (cmd.ttl().isNegative() || cmd.ttl().isZero())) {
       throw new IllegalArgumentException("ttl must be positive");
+    }
+  }
+
+  /**
+   * FR-10 dispatch XOR — exactly one of {@code warehouseId} / {@code shippingRegion} must be
+   * non-null. The picker is called only when {@code shippingRegion} is supplied; v1 saga
+   * callers continue to supply {@code warehouseId}.
+   */
+  private static void validateWarehouseDispatch(ReserveInventoryCommand cmd) {
+    boolean hasWarehouseId = cmd.warehouseId() != null;
+    boolean hasRegion = cmd.shippingRegion() != null;
+    if (!hasWarehouseId && !hasRegion) {
+      throw new IllegalArgumentException("warehouseId or shippingRegion required");
+    }
+    if (hasWarehouseId && hasRegion) {
+      throw new IllegalArgumentException("exactly one of warehouseId, shippingRegion required");
     }
   }
 }

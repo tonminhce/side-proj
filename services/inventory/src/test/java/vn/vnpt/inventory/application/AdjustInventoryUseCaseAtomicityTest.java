@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.inventory.InventoryApplication;
 import vn.vnpt.inventory.application.port.OutboxPublisher;
 import vn.vnpt.inventory.domain.InventoryReason;
+import vn.vnpt.inventory.domain.Region;
 import vn.vnpt.inventory.domain.Warehouse;
 import vn.vnpt.inventory.infrastructure.repository.WarehouseRepository;
 
@@ -82,7 +83,7 @@ class AdjustInventoryUseCaseAtomicityTest {
                 Warehouse.builder()
                     .code("HCM-01-ATOMIC-" + System.nanoTime())
                     .displayName("Ho Chi Minh")
-                    .build())
+                    .region(Region.SOUTH).build())
             .getUuid();
   }
 

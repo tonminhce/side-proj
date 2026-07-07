@@ -62,6 +62,13 @@ else
   report 1 "postgres: inventory_reservation table missing (V003 not applied)"
 fi
 
+# 1e. Story 1.7 — verify warehouses.region column + 2 seeded warehouses (HCM-01 + HN-01).
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_INVENTORY_USER:-inventory_user}" -d "${POSTGRES_INVENTORY_DB:-inventory_db}" -tAc "SELECT COUNT(*) FROM warehouses WHERE region IN ('NORTH', 'SOUTH')" 2>/dev/null | grep -qE '^[2-9][0-9]*$|^[1-9][0-9]+'; then
+  report 0 "postgres: warehouses.region seeded (>= 2 warehouses in NORTH/SOUTH)"
+else
+  report 1 "postgres: warehouses.region not seeded (V005 not applied)"
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"
