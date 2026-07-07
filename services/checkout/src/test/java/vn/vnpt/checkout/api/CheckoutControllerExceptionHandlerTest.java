@@ -1,7 +1,6 @@
 package vn.vnpt.checkout.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -13,11 +12,13 @@ import vn.vnpt.checkout.domain.CheckoutStatus;
 import vn.vnpt.checkout.domain.exception.CheckoutNotFoundException;
 import vn.vnpt.checkout.domain.exception.CheckoutVersionConflictException;
 import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
+import vn.vnpt.util.web.RestExceptionHandler;
 
 /** Story 2.3 / FR-19, FR-21 — exception → HTTP mapping. Direct handler invocation (no MockMvc). */
 class CheckoutControllerExceptionHandlerTest {
 
   private final CheckoutControllerExceptionHandler handler = new CheckoutControllerExceptionHandler();
+  private final RestExceptionHandler commonHandler = new RestExceptionHandler();
 
   @Test
   void handleCheckoutNotFoundException_returns404() {
@@ -79,7 +80,7 @@ class CheckoutControllerExceptionHandlerTest {
   @Test
   void handleIllegalArgument_returns400_withMessage() {
     ResponseEntity<Map<String, Object>> response =
-        handler.handleValidation(new IllegalArgumentException("cartUuid is required"));
+        commonHandler.handleValidation(new IllegalArgumentException("cartUuid is required"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     Map<String, Object> body = response.getBody();

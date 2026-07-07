@@ -25,6 +25,7 @@ import vn.vnpt.checkout.domain.ShippingAddress;
 import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
 import vn.vnpt.checkout.domain.snapshot.CartLineSnapshot;
 import vn.vnpt.checkout.infrastructure.outbox.CheckoutEventPublisher;
+import vn.vnpt.inventory.application.ReserveInventoryUseCase;
 
 /**
  * ADR-04 atomicity regression guard — when the outbox publisher throws AFTER the Checkout row
@@ -59,6 +60,7 @@ class StartCheckoutUseCaseAtomicityTest {
   @Autowired JdbcTemplate jdbc;
   @MockitoBean CheckoutEventPublisher publisher;
   @MockitoBean StripePaymentGateway stripePaymentGateway;
+  @MockitoBean ReserveInventoryUseCase reserveInventoryUseCase;
 
   @org.junit.jupiter.api.BeforeEach
   void stubStripe() {
@@ -150,5 +152,56 @@ class StartCheckoutUseCaseAtomicityTest {
         jdbc.queryForObject(
             "SELECT COUNT(*) FROM outbox WHERE event_type = 'checkout.started'", Integer.class);
     assertThat(outboxRows).isEqualTo(0);
+  }
+
+  /**
+   * Story 2.5 / FR-22 — when the upstream (Stripe) fails BEFORE the checkout row is INSERTed,
+   * the {@code checkout.started} event is never published and the saga never runs. The
+   * storefront never sees a half-state — no checkout, no orders, no transition rows.
+   */
+  @Test
+  void start_stripeThrows_rollsBackCheckoutAndSaga() {
+    Mockito
+        .when(stripePaymentGateway.createPaymentIntent(anyLong(), anyString(), anyString()))
+        .thenThrow(new StripePaymentIntentException("simulated Stripe failure (Story 2.5 saga-rolls-back)"));
+
+    StartCheckoutRequest request =
+        StartCheckoutRequest.builder()
+            .cartUuid(99001L)
+            .userId("u-saga-1")
+            .shippingAddress(
+                ShippingAddress.builder()
+                    .recipientName("Nguyen Van Saga")
+                    .phone("0901112222")
+                    .addressLine1("789 Saga Street")
+                    .city("HCM")
+                    .province("HCM")
+                    .country("VN")
+                    .build())
+            .cartLines(
+                List.of(
+                    CartLineSnapshot.builder()
+                        .variantId(3001L)
+                        .quantity(1)
+                        .unitPriceMinor(75_000L)
+                        .build()))
+            .build();
+
+    assertThatThrownBy(() -> useCase.start(request))
+        .isInstanceOf(StripePaymentIntentException.class);
+
+    // No checkout row, no checkout.started outbox, no orders row, no transition rows.
+    Integer checkoutRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM checkouts WHERE cart_uuid = 99001", Integer.class);
+    assertThat(checkoutRows).isEqualTo(0);
+    Integer outboxRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM outbox WHERE event_type = 'checkout.started'", Integer.class);
+    assertThat(outboxRows).isEqualTo(0);
+    Integer orderRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM orders WHERE cart_uuid = 99001", Integer.class);
+    assertThat(orderRows).isEqualTo(0);
+    Integer transitionRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM order_state_transition", Integer.class);
+    assertThat(transitionRows).isEqualTo(0);
   }
 }

@@ -28,6 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.vnpt.checkout.CheckoutApplication;
 import vn.vnpt.checkout.application.GetCheckoutUseCase;
 import vn.vnpt.checkout.application.StartCheckoutUseCase;
+import vn.vnpt.inventory.application.ReserveInventoryUseCase;
 import vn.vnpt.checkout.domain.Checkout;
 import vn.vnpt.checkout.domain.CheckoutStatus;
 import vn.vnpt.checkout.domain.ShippingAddress;
@@ -59,6 +60,7 @@ class CheckoutControllerTest {
   @Autowired WebApplicationContext wac;
   @MockitoBean StartCheckoutUseCase startCheckoutUseCase;
   @MockitoBean GetCheckoutUseCase getCheckoutUseCase;
+  @MockitoBean ReserveInventoryUseCase reserveInventoryUseCase;
 
   private MockMvc mvc;
 

@@ -1,6 +1,7 @@
 package vn.vnpt.checkout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -8,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.ObjectMapper;
+import vn.vnpt.inventory.application.ReserveInventoryUseCase;
+import vn.vnpt.inventory.domain.InventoryReservation;
+import vn.vnpt.inventory.domain.ReservationStatus;
 
 /**
  * End-to-end outbox tests for Story 2.3 (FR-19). Unlike {@code CheckoutControllerTest} (which mocks
@@ -59,6 +65,7 @@ class CheckoutEventOutboxE2ETest {
   @Autowired WebApplicationContext wac;
   @Autowired JdbcTemplate jdbc;
   @MockitoBean StripePaymentGateway stripePaymentGateway;
+  @MockitoBean ReserveInventoryUseCase reserveInventoryUseCase;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -66,6 +73,19 @@ class CheckoutEventOutboxE2ETest {
   void stubStripe() {
     when(stripePaymentGateway.createPaymentIntent(anyLong(), anyString(), anyString()))
         .thenReturn(new StripePaymentGateway.Result("pi_e2e_test_abc", "pi_e2e_test_abc_secret"));
+    // Stub inventory reserve so the saga's stock.reserve step succeeds — full path: CREATED →
+    // STOCK_RESERVED → PAYMENT_PENDING. Without this the saga fails on INSUFFICIENT_STOCK.
+    InventoryReservation fakeReservation = InventoryReservation.builder()
+        .variantId(1001L)
+        .warehouseId(7L)
+        .quantity(2L)
+        .status(ReservationStatus.ACTIVE)
+        .tenantId("default")
+        .sagaStepId("ignored")
+        .orderUuid(0L)
+        .expiresAt(Instant.now().plusSeconds(900))
+        .build();
+    when(reserveInventoryUseCase.reserve(any())).thenReturn(fakeReservation);
   }
 
   private MockMvc mvc() {
@@ -143,6 +163,39 @@ class CheckoutEventOutboxE2ETest {
             String.class,
             checkoutUuid);
     assertThat(hmac).isNotBlank();
+
+    // Story 2.5 / FR-22 — the saga runs in the same transaction as the producer, so after
+    // commit the saga's 3 outbox rows + 3 transition-log rows are visible alongside the
+    // checkout.started row.
+    Integer orderCreatedRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM outbox WHERE aggregate_type = 'Order'"
+            + " AND event_type = 'order.created' AND aggregate_id IN"
+            + " (SELECT uuid FROM orders WHERE checkout_uuid = ?)",
+        Integer.class,
+        checkoutUuid);
+    assertThat(orderCreatedRows).isEqualTo(1);
+    Integer orderStockReservedRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM outbox WHERE aggregate_type = 'Order'"
+            + " AND event_type = 'order.stock_reserved' AND aggregate_id IN"
+            + " (SELECT uuid FROM orders WHERE checkout_uuid = ?)",
+        Integer.class,
+        checkoutUuid);
+    assertThat(orderStockReservedRows).isEqualTo(1);
+    Integer orderPaymentPendingRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM outbox WHERE aggregate_type = 'Order'"
+            + " AND event_type = 'order.payment_pending' AND aggregate_id IN"
+            + " (SELECT uuid FROM orders WHERE checkout_uuid = ?)",
+        Integer.class,
+        checkoutUuid);
+    assertThat(orderPaymentPendingRows).isEqualTo(1);
+
+    // 3 transition-log rows for the saga (cart.submit, stock.reserve, payment.intent.created).
+    Integer transitionRows = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM order_state_transition"
+            + " WHERE order_uuid IN (SELECT uuid FROM orders WHERE checkout_uuid = ?)",
+        Integer.class,
+        checkoutUuid);
+    assertThat(transitionRows).isEqualTo(3);
   }
 
   /**

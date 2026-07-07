@@ -135,6 +135,18 @@
             <artifactId>stripe-java</artifactId>
             <version>33.1.0</version>
         </dependency>
+
+        <!--
+          Intra-Modulith inventory dependency — Story 2.5 / FR-22 (ADR-01 / ADR-12).
+          The saga's JavaDirectInventoryReservationAdapter is the only consumer; cross-service
+          events remain Modulith events (this dep is for the application's PUBLIC API surface).
+          Version inherited from root reactor (1.0-SNAPSHOT).
+        -->
+        <dependency>
+            <groupId>vn.vnpt</groupId>
+            <artifactId>inventory</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

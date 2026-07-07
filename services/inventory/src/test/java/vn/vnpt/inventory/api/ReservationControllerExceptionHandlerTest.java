@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import vn.vnpt.inventory.domain.exception.InsufficientStockException;
 import vn.vnpt.inventory.domain.exception.ReservationNotFoundException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
+import vn.vnpt.util.web.RestExceptionHandler;
 
 /**
  * Direct unit test for {@link ReservationControllerExceptionHandler} — Story 1.6 / AC #22.
@@ -17,11 +18,16 @@ import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
  * <p>Pins the 4-status mapping without spinning up a Spring context or MockMvc. The controller
  * test ({@link InventoryReservationControllerTest}) covers the integration; this covers the
  * mapping itself so a regression in the handler is caught even if the controller wiring changes.
+ *
+ * <p>Story 2.5 — pre-fix note: {@code handleValidation} used to live on this handler but moved
+ * to {@link RestExceptionHandler} (util) during the F5 refactor (commit c1b9827). Test updated
+ * to invoke the util handler directly.
  */
 class ReservationControllerExceptionHandlerTest {
 
   private final ReservationControllerExceptionHandler handler =
       new ReservationControllerExceptionHandler();
+  private final RestExceptionHandler commonHandler = new RestExceptionHandler();
 
   @Test
   void insufficientStock_mapsTo409WithDiagnosticFields() {
@@ -53,12 +59,13 @@ class ReservationControllerExceptionHandlerTest {
   @Test
   void illegalArgument_mapsTo400() {
     ResponseEntity<Map<String, Object>> response =
-        handler.handleValidation(new IllegalArgumentException("bad input"));
+        commonHandler.handleValidation(new IllegalArgumentException("bad input"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     Map<String, Object> body = response.getBody();
     assertThat(body).isNotNull();
-    assertThat(body.get("error")).isEqualTo("validation_error");
+    assertThat(body.get("code")).isEqualTo(400);
+    assertThat(body.get("status")).isEqualTo("BAD_REQUEST");
     assertThat(body.get("message")).isEqualTo("bad input");
   }
 

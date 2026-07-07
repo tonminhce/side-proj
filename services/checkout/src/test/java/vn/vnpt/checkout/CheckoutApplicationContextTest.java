@@ -12,9 +12,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import vn.vnpt.inventory.application.ReserveInventoryUseCase;
 
 /**
  * Smoke test — the CheckoutService Spring context boots end-to-end against a real Postgres
@@ -41,6 +43,7 @@ class CheckoutApplicationContextTest {
   }
 
   @Autowired DataSource dataSource;
+  @MockitoBean ReserveInventoryUseCase reserveInventoryUseCase;
 
   @Test
   void contextLoads_withFlywayAppliedV001() {

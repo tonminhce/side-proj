@@ -22,12 +22,17 @@ import vn.vnpt.util.component.softdelete.annotation.SoftUks;
  */
 class CheckoutPackageBoundaryTest {
 
-  /** Rule 1 — no class under {@code vn.vnpt.checkout..} may depend on a sibling service's package. */
+  /** Rule 1 — no class under {@code vn.vnpt.checkout..} may depend on a sibling service's package,
+   *  EXCEPT {@code vn.vnpt.checkout.infrastructure.inventory..} which (per ADR-01 intra-Modulith)
+   *  may import {@code vn.vnpt.inventory.application..} — that's the only sanctioned sibling
+   *  Java-call surface in Story 2.5. */
   @Test
   void checkout_doesNotDependOnSiblingServices() {
     noClasses()
         .that()
         .resideInAPackage("vn.vnpt.checkout..")
+        .and()
+        .resideOutsideOfPackage("vn.vnpt.checkout.infrastructure.inventory..")
         .should()
         .dependOnClassesThat()
         .resideInAnyPackage(
@@ -46,8 +51,9 @@ class CheckoutPackageBoundaryTest {
             "vn.vnpt.invoice..")
         .because(
             "CheckoutService communicates with siblings via Modulith events (ADR-01, ADR-04),"
-                + " NOT Java imports (ADR-03). Story 2.3 ships ZERO inbound cross-service event"
-                + " consumers; the saga listener for checkout.started is Story 2.5's territory.")
+                + " NOT Java imports (ADR-03). The single intra-Modulith exception is"
+                + " infrastructure.inventory.. which may import vn.vnpt.inventory.application.*"
+                + " per ADR-01 (Java method calls between modules' public APIs).")
         .check(
             new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)

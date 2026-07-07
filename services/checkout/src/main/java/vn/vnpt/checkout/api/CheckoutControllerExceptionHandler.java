@@ -10,9 +10,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vn.vnpt.checkout.domain.exception.CheckoutNotFoundException;
 import vn.vnpt.checkout.domain.exception.CheckoutVersionConflictException;
+import vn.vnpt.checkout.domain.exception.OrderNotFoundException;
 import vn.vnpt.checkout.domain.exception.StripePaymentIntentException;
 
-/** Checkout-domain exceptions → HTTP. Story 2.3 / FR-19, FR-21. */
+/** Checkout-domain exceptions → HTTP. Story 2.3 / FR-19, FR-21; Story 2.5 / FR-22 (Order 404). */
 @RestControllerAdvice
 @Slf4j
 public class CheckoutControllerExceptionHandler {
@@ -58,5 +59,19 @@ public class CheckoutControllerExceptionHandler {
     body.put("status", "BAD_GATEWAY");
     body.put("message", "Payment provider unavailable");
     return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
+  }
+
+  /** Story 2.5 / FR-22 — Order not found for the given checkout uuid. */
+  @ExceptionHandler(OrderNotFoundException.class)
+  public ResponseEntity<Map<String, Object>> handleOrderNotFound(OrderNotFoundException e) {
+    log.debug("404 order not_found: {}", e.getMessage());
+    Map<String, Object> body = new HashMap<>();
+    body.put("code", 404);
+    body.put("status", "NOT_FOUND");
+    body.put("message", "Order not found");
+    Map<String, Object> details = new HashMap<>();
+    details.put("checkoutUuid", e.getCheckoutUuid());
+    body.put("details", details);
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
   }
 }
