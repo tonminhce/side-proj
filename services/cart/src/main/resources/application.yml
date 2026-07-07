@@ -70,6 +70,11 @@ cart:
   merge:
     # Algorithm for the idempotency-key hash (AC #6). Config-driven for a future SHA-3 swap.
     sha-algorithm: SHA-256
+  auto-expire:
+    # Story 2.2 / FR-18: 30-day TTL default + 5-minute sweeper cadence.
+    ttl-days: 30
+    sweeper-interval-ms: 300000
+    sweeper-batch-size: 100
 
 logging:
   level:

@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # dev-story — Story 2.1 CartService implemented, status → review
+last_updated: 2026-07-07  # dev-story — Story 2.2 status → review
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@ development_status:
   epic-1-retrospective: optional
   epic-2: in-progress  # Epic 2: Add to Cart and Checkout
   2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: done  # story-automator review 2026-07-07 — 2 HIGH fixed (AddLineUseCase soft-delete filter via findActiveByCartUuidAndVariantId; MergeCartUseCase TOCTOU ownership race fixed via lockAnonymousCart pessimistic row lock); 2 MEDIUM fixed (CartControllerExceptionHandler 409 body now includes cart lines per AC #5; story test count corrected 39→73); 0 CRITICAL remain; 73/73 cart tests green; util 57/57 + inventory 238/238 preserved; 17 modules preserved; 6/6 boundary rules
-  2-2-cart-auto-expire-line-added-event-fr-17-fr-18: backlog
+  2-2-cart-auto-expire-line-added-event-fr-17-fr-18: done  # story-automator review 2026-07-07 — 0 CRITICAL/HIGH; 2 MEDIUM fixed (File List completed with CartEventOutboxE2ETest + test-summary.md; test-count claim corrected 96→97) + 2 LOW (removed duplicate concurrent-edit test; checked completed subtasks); 97/97 cart tests green; V002 + cart.line.added + cart.expired + 30-day sweeper; util 57/57 + inventory 238/238 preserved; 17 modules; 8/8 boundary rules
   2-3-checkoutservice-single-page-checkout-api-fr-19-fr-21: backlog
   2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: backlog
   2-5-saga-orchestrator-spring-modulith-outbox-state-machine-fr-22-fr-23-q1-binding: backlog

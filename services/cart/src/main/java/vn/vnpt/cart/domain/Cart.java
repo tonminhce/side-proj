@@ -7,12 +7,15 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 import vn.vnpt.util.common.entity.base.BaseEntity;
 import vn.vnpt.util.component.softdelete.annotation.SoftUk;
 
@@ -66,6 +69,14 @@ public class Cart extends BaseEntity {
   @Version
   @Column(name = "version", nullable = false)
   private Long version;
+
+  // Story 2.2 / FR-18: TTL anchor for cart auto-expire. Set by V002 column DEFAULT at INSERT;
+  // Hibernate does NOT send the column on INSERT (@Generated INSERT) so the DB default
+  // `now() + INTERVAL '30 days'` is applied; @PrePersist does NOT set this. Sweeper compares
+  // expires_at < now(). Mutable — TTL-extension features bump it explicitly (UPDATE allowed).
+  @Generated(event = EventType.INSERT)
+  @Column(name = "expires_at", nullable = false, columnDefinition = "TIMESTAMP", updatable = true)
+  private Instant expiresAt;
 
   /** Defaults {@code status = ANONYMOUS} + {@code tenantId = "default"} at insert time. */
   @PrePersist

@@ -621,3 +621,118 @@ Story 1.6 is a backend-only service (no UI surface). API/integration testing onl
 4. **Story 10.2 chaos experiment follow-up:** The 100× concurrent test is a steady-state regression guard. The chaos experiment validates the FOR UPDATE pattern under DB connection drop / mid-tx failure — the existing rollback path is pinned by Story 1.5's `AdjustInventoryUseCaseAtomicityTest` (the reservation path inherits the same `@Transactional` semantics).
 
 5. **Story 10.5 e2e-tests follow-up:** A Playwright spec for `POST /api/inventory-reservations` would be the first inventory HTTP E2E test. The current story's HTTP coverage is via `@SpringBootTest` + manually-built `MockMvc` (Boot 4 removed `@WebMvcTest`). The Playwright spec lands with the testcontainers harness + dev compose wiring that Story 10.5 brings.
+
+---
+
+# Test Automation Summary — Story 2.2
+
+**Story:** Cart auto-expire + `line.added` event (FR-17, FR-18)
+**Story file:** `_bmad-output/implementation-artifacts/2-2-cart-auto-expire-line-added-event-fr-17-fr-18.md`
+**Workflow:** `bmad-qa-generate-e2e-tests`
+**Test framework:** JUnit 5 + Spring Boot Test + MockMvc + AssertJ + Testcontainers (Postgres 16-alpine)
+**Test command:** `mvn -pl services/cart test`
+**Date:** 2026-07-07
+
+Story 2.2 is a backend service (no UI surface). "E2E" here = full-wiring API/integration tests through the real controller/use-case/publisher/outbox stack against a real Postgres.
+
+---
+
+## Generated / Added Tests
+
+### QA-pass gap fill (this workflow run)
+
+| Path | Δ Cases | Gap addressed |
+|------|--------:|---------------|
+| `services/cart/src/test/java/vn/vnpt/cart/CartEventOutboxE2ETest.java` (new) | +2 | **HIGH — the two new Story 2.2 outbox flows (FR-17, FR-18) were verified only by Mockito or by a manual shell script (`dev/scripts/cart_expiry_smoke.sh`).** No automated test drove the full HTTP/scheduled path → real `CartEventPublisher` → real `ModulithOutboxPublisher` → an actual `outbox` row. `CartControllerTest` mocks every use case, so the publisher/outbox path was never exercised end-to-end. |
+
+**QA-pass additions: +2 tests in 1 new file.**
+
+### The two gap-fill cases
+
+1. `addLine_overHttp_emitsCartLineAddedRowInOutbox` (FR-17) — creates a cart, POSTs `/api/carts/{uuid}/lines` through the real controller + `AddLineUseCase` + `CartEventPublisher` + `ModulithOutboxPublisher`, then asserts exactly one `cart.line.added` row exists in the `outbox` table for that aggregate with `payload.variantId=1001`, `payload.quantity=2`, and a non-empty `signatures.hmac_sha256` (ADR-20).
+2. `sweeper_expiresPastTtlCart_emitsCartExpiredRowInOutbox` (FR-18) — creates an anonymous cart, forces `expires_at` into the past via SQL, invokes the real `CartAutoExpireSweeperJob.sweep()`, then asserts the cart transitioned to `ABANDONED` with a bumped version AND exactly one `cart.expired` row in `outbox` carrying `payload.previousStatus=ANONYMOUS` and a non-empty HMAC.
+
+---
+
+## Coverage
+
+| AC | Before this QA pass | After this QA pass | Notes |
+|----|--------------------:|-------------------:|-------|
+| #3 (FR-17 `cart.line.added` emitted on add + serialized/HMAC-signed) | ⚠️ Partial — `AddLineUseCaseTest` (mocked publisher), `CartEventPublisherTest` (mocked outbox), `CartLineAddedEventTest` (JSON round-trip) — no full-wiring proof the row lands | ✅ | New `addLine_overHttp_emitsCartLineAddedRowInOutbox` drives HTTP → DB and asserts the actual outbox row + payload + signature. |
+| #4 (FR-18 sweeper transitions cart → ABANDONED + emits `cart.expired`) | ⚠️ Partial — `CartAutoExpireSweeperJobTest` + `ExpireCartUseCaseTest` (all Mockito) — no full-wiring proof against a real DB | ✅ | New `sweeper_expiresPastTtlCart_emitsCartExpiredRowInOutbox` runs the real sweeper against Testcontainers and asserts the state transition + outbox row. |
+| #7 (~95 cart tests green) | ✅ (96) | ✅ (98; +2 from this QA pass) | Story shipped 96; QA pass adds 2 E2E. |
+| #10 (`cart_expiry_smoke.sh` end-to-end) | ✅ manual shell script | ✅ + automated equivalent | The two E2E tests are the automated in-JVM equivalent of the smoke script's FR-17 + FR-18 assertions. |
+| #14 (util 57/57, inventory 238/238 preserved) | ✅ | ✅ | Tests-only change; no production code touched, no cross-module impact. |
+
+### Test count
+
+| Stage | Count | Δ |
+|-------|------:|---:|
+| Story 2.2 implementation | 96 cart | — |
+| **This QA pass** | **+2 cart** (2 E2E outbox) | |
+| **Total after Story 2.2 QA** | **98 cart** | |
+
+`mvn -pl services/cart test` → **98 cart tests pass, 0 failures, 0 errors, 0 skipped** (verified 2026-07-07). New class:
+```
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in vn.vnpt.cart.CartEventOutboxE2ETest
+```
+
+---
+
+## Discovered gaps (auto-applied)
+
+### HIGH — FR-17 / FR-18 outbox emission had no full-wiring automated test (AC #3, #4)
+
+**Symptom:** Story 2.2's headline behaviors are "a `cart.line.added` row lands in the outbox when a line is added" (FR-17) and "the sweeper transitions an expired cart to ABANDONED and lands a `cart.expired` row" (FR-18). Every existing test verified a *slice*: use-case logic with a mocked publisher, the publisher with a mocked outbox, or the event JSON in isolation. The `CartControllerTest` HTTP-slice mocks all use cases, so the real controller → use case → `CartEventPublisher` → `ModulithOutboxPublisher` → JdbcTemplate `INSERT INTO outbox` chain was never exercised together. The only end-to-end proof was the manual `dev/scripts/cart_expiry_smoke.sh`, which requires a running service and a human to run it. A regression in the wiring (e.g. the publish call dropped from `AddLineUseCase`, the sweeper not invoking `expireSingleCart`, or the outbox INSERT SQL broken) would pass every unit test and only surface in production or manual smoke.
+
+**Fix applied:** New `CartEventOutboxE2ETest` — a `@SpringBootTest` (real beans, no `@MockitoBean`) + Testcontainers Postgres, mirroring the existing `CartApplicationContextTest` container setup. Two tests assert the actual `outbox` rows land with correct `event_type`, payload fields, and HMAC signature for both FR-17 (over HTTP via MockMvc) and FR-18 (via the real scheduled `sweep()` invoked directly).
+
+---
+
+## Gaps NOT addressed (deliberately skipped)
+
+| Gap | Why skipped | When to revisit |
+|-----|-------------|----------------|
+| FR-17 emission on the merge path (N transferred lines → N `cart.line.added` rows) at full wiring | `MergeCartUseCaseTest.merge_emitsCartLineAddedEventPerTransferredLine` already pins the N-events contract with a mocked publisher, and the FR-17 outbox landing is now proven end-to-end by the add-line E2E test (same `publishLineAdded` code path). A second full-wiring test would exercise the identical publisher→outbox leg with no new signal. | Story 2.5 (checkout saga) if the merge path gains new outbox semantics. |
+| Consumer-side idempotency (`processed_event` insert on consume, NFR-IDEM-1) | The `processed_event` table is intentionally empty in Story 2.2 — Story 6.4 (`RecommendationService`) is the first consumer. There is no consumer code to test yet. | Story 6.4 — when the first `cart.line.added` consumer lands. |
+| Sweeper `@Scheduled` cron-firing (waiting for the 5-minute timer) | Testing the timer itself would require a `Thread.sleep`/Awaitility poll (forbidden by the checklist) and would test Spring's scheduler, not our code. The E2E test invokes `sweep()` directly — deterministic and it exercises all our logic. | Never — invoking the method directly is the correct unit of coverage. |
+| HMAC signature *verification* on the emitted cart events | Cart is the producer in Story 2.2; the E2E tests assert the `signatures.hmac_sha256` field is present and non-blank. Verifying the signature value is `HmacEventSigner`'s own contract (util 57/57, unchanged) and belongs to the consumer story. | Story 6.4 — consumer-side verify. |
+
+---
+
+## Validation against `checklist.md`
+
+### Test Generation
+
+- [x] **API tests generated** — `addLine_overHttp_emitsCartLineAddedRowInOutbox` exercises `POST /api/carts/{uuid}/lines` through the real controller.
+- [x] **E2E tests generated (if UI exists)** — N/A UI; full-wiring in-JVM E2E (HTTP/scheduled → real beans → real Postgres → outbox row) stands in for the UI-less service, and is the automated equivalent of `cart_expiry_smoke.sh`.
+- [x] **Tests use standard test framework APIs** — JUnit 5 + Spring Boot Test + MockMvc + AssertJ + JdbcTemplate + Testcontainers. No new deps.
+- [x] **Tests cover happy path** — line add emits event; expired cart is swept + event emitted.
+- [x] **Tests cover critical assertions** — outbox row count, payload fields, HMAC presence, status transition + version bump.
+
+### Test Quality
+
+- [x] **All generated tests run successfully** — 98/98 cart tests pass; `CartEventOutboxE2ETest` 2/2.
+- [x] **Tests use proper locators** — N/A (backend); SQL assertions query by column name (semantic), not row index.
+- [x] **Tests have clear descriptions** — `addLine_overHttp_emitsCartLineAddedRowInOutbox`, `sweeper_expiresPastTtlCart_emitsCartExpiredRowInOutbox`.
+- [x] **No hardcoded waits or sleeps** — the sweeper is invoked directly (no timer wait); no `Thread.sleep`.
+- [x] **Tests are independent (no order dependency)** — each test creates its own cart and scopes every outbox query by that cart's `aggregate_id`; class-scoped Testcontainers container.
+
+### Output
+
+- [x] **Test summary created** — this section (appended after Story 1.6).
+- [x] **Tests saved to appropriate directory** — `services/cart/src/test/java/vn/vnpt/cart/`.
+- [x] **Summary includes coverage metrics** — Coverage table + test-count table + per-class breakdown.
+
+### Validation
+
+**Expected:** All tests pass ✅
+**Actual:** `mvn -pl services/cart test` → Tests run: 98, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS.
+
+---
+
+## Next Steps
+
+1. **Commit QA pass.** 1 new file (`CartEventOutboxE2ETest`, 2 tests). No production code touched, no new deps. Branch: stay on `fix/r-01-util-parent-pom`. Suggested prefix: `test(cart): QA-pass E2E gap fill — FR-17/FR-18 outbox landing via real wiring (Story 2.2)`.
+2. **Surface to reviewer:** The two new tests are the automated equivalent of `dev/scripts/cart_expiry_smoke.sh` steps 2 (cart.line.added) and 5 (cart.expired) — the smoke script can remain as the ops-level check while CI now guards the wiring.
+3. **Story 6.4 (RecommendationService) follow-up:** first consumer of `cart.line.added`; will add the `processed_event` idempotency + HMAC-verify tests deferred above.

@@ -18,7 +18,8 @@ import vn.vnpt.util.component.softdelete.annotation.SoftUk;
 import vn.vnpt.util.component.softdelete.annotation.SoftUks;
 
 /**
- * Modulith package-boundary enforcement for CartService — Story 2.1 / AC #9 (6 ArchUnit rules).
+ * Modulith package-boundary enforcement for CartService — Story 2.1 / AC #9 (6 ArchUnit rules),
+ * extended in Story 2.2 with 2 rules for the cart sweeper placement + expiry-event routing.
  * Mirrors {@code InventoryPackageBoundaryTest}.
  */
 class CartPackageBoundaryTest {
@@ -188,5 +189,54 @@ class CartPackageBoundaryTest {
       // skip filesystem-walk failures
     }
     return emitUseCases;
+  }
+
+  /**
+   * Rule 7 (Story 2.2 / FR-18) — the cart auto-expire sweeper MUST live in {@code
+   * vn.vnpt.cart.application} so it can see {@code ExpireCartUseCase} without violating the package
+   * layering. Mirrors the inventory sweeper placement precedent.
+   */
+  @Test
+  void cart_sweeperJob_isInApplicationPackage() throws Exception {
+    Class<?> cls =
+        Class.forName("vn.vnpt.cart.application.CartAutoExpireSweeperJob");
+    if (!cls.getPackageName().equals("vn.vnpt.cart.application")) {
+      throw new AssertionError(
+          "CartAutoExpireSweeperJob must live in vn.vnpt.cart.application (got " + cls.getPackageName() + ")");
+    }
+  }
+
+  /**
+   * Rule 8 (Story 2.2 / FR-17 + FR-18) — use cases that emit {@code cart.line.added} or
+   * {@code cart.expired} MUST route through {@link CartEventPublisher}, NOT {@link OutboxPublisher}
+   * directly. Same reflection scan as Rule 6; just verifies the extended set of emit use cases
+   * (AddLine, MergeCart, ExpireCart) all declare CartEventPublisher and none declare a direct
+   * OutboxPublisher.
+   */
+  @Test
+  void cart_expiryEventsRouteThroughPublisher() throws Exception {
+    for (Class<?> useCase : emitUseCaseClasses()) {
+      boolean hasPublisher = false;
+      boolean hasDirectOutbox = false;
+      for (java.lang.reflect.Field field : useCase.getDeclaredFields()) {
+        String type = field.getType().getName();
+        if (type.equals(CartEventPublisher.class.getName())) {
+          hasPublisher = true;
+        }
+        if (type.equals(OutboxPublisher.class.getName())
+            || type.equals("vn.vnpt.cart.infrastructure.outbox.ModulithOutboxPublisher")) {
+          hasDirectOutbox = true;
+        }
+      }
+      if (!hasPublisher) {
+        throw new AssertionError(
+            "Use case " + useCase.getName() + " emits events but does not declare CartEventPublisher");
+      }
+      if (hasDirectOutbox) {
+        throw new AssertionError(
+            "Use case " + useCase.getName() + " bypasses CartEventPublisher — direct OutboxPublisher"
+                + " reference forbidden for cart lifecycle events");
+      }
+    }
   }
 }

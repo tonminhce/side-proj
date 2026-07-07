@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -204,5 +205,43 @@ class MergeCartUseCaseTest {
 
     inOrder.verify(cartRepository).lockAnonymousCart("default", GUEST);
     inOrder.verify(cartMergeLogRepository).findByGuestCartId(GUEST);
+  }
+
+  @Test
+  void merge_emitsCartLineAddedEventPerTransferredLine() {
+    Cart source = source();
+    Cart target = target();
+    when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
+    when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
+    when(cartLineRepository.findByCartUuid(100L)).thenReturn(
+        List.of(srcLine(1001L, 2), srcLine(1002L, 1), srcLine(1003L, 4)));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(anyLong(), anyLong())).thenReturn(Optional.empty());
+
+    useCase.merge(GUEST, USER);
+
+    // N transferred lines → N cart.line.added events.
+    verify(cartEventPublisher, org.mockito.Mockito.times(3))
+        .publishLineAdded(org.mockito.ArgumentMatchers.eq(target), any(CartLine.class));
+  }
+
+  @Test
+  void merge_emitsCartMergedEvent_oncePlusCartLineAddedEvents_perLine() {
+    Cart source = source();
+    Cart target = target();
+    when(cartMergeLogRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+    when(cartMergeLogRepository.findByGuestCartId(GUEST)).thenReturn(List.of());
+    when(getOrCreateCartUseCase.getOrCreate(null, USER)).thenReturn(target);
+    when(cartRepository.lockAnonymousCart("default", GUEST)).thenReturn(Optional.of(source));
+    when(cartLineRepository.findByCartUuid(100L)).thenReturn(
+        List.of(srcLine(1001L, 2), srcLine(1002L, 1)));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(anyLong(), anyLong())).thenReturn(Optional.empty());
+
+    useCase.merge(GUEST, USER);
+
+    verify(cartEventPublisher).publishCartMerged(eq(source), eq(target), eq(2));
+    verify(cartEventPublisher, org.mockito.Mockito.times(2))
+        .publishLineAdded(org.mockito.ArgumentMatchers.eq(target), any(CartLine.class));
   }
 }

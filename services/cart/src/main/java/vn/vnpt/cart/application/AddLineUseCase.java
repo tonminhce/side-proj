@@ -8,6 +8,7 @@ import vn.vnpt.cart.domain.Cart;
 import vn.vnpt.cart.domain.CartLine;
 import vn.vnpt.cart.domain.exception.CartNotFoundException;
 import vn.vnpt.cart.domain.exception.CartVersionConflictException;
+import vn.vnpt.cart.infrastructure.outbox.CartEventPublisher;
 import vn.vnpt.cart.infrastructure.repository.CartLineRepository;
 import vn.vnpt.cart.infrastructure.repository.CartRepository;
 
@@ -26,6 +27,7 @@ public class AddLineUseCase {
 
   private final CartRepository cartRepository;
   private final CartLineRepository cartLineRepository;
+  private final CartEventPublisher cartEventPublisher;
 
   public Cart addLine(Long cartUuid, Long variantId, int quantity, Long expectedVersion) {
     if (quantity <= 0) {
@@ -58,6 +60,7 @@ public class AddLineUseCase {
                           .quantity(quantity)
                           .build());
       cartLineRepository.save(line);
+      cartEventPublisher.publishLineAdded(cart, line);
       return cartRepository.save(cart);
     } catch (ObjectOptimisticLockingFailureException e) {
       Cart latest = cartRepository.findById(cartUuid).orElse(cart);

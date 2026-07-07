@@ -76,4 +76,43 @@ class CartApplicationContextTest {
             Integer.class);
     assertThat(uq).isEqualTo(1);
   }
+
+  /** Story 2.2 / FR-18 — V002 adds the TTL anchor column with a 30-day default. */
+  @Test
+  void contextLoads_withFlywayAppliedV002_expiresAtColumnExists() {
+    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+    Integer v002 =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '002'", Integer.class);
+    assertThat(v002).isEqualTo(1);
+
+    Integer expiresAtColumn =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.columns"
+                + " WHERE table_name = 'carts' AND column_name = 'expires_at'",
+            Integer.class);
+    assertThat(expiresAtColumn).isEqualTo(1);
+
+    // Partial sweeper index exists.
+    Integer sweeperIdx =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM pg_indexes"
+                + " WHERE indexname = 'idx_carts_status_expires_at'",
+            Integer.class);
+    assertThat(sweeperIdx).isEqualTo(1);
+
+    // Column default applies on insert — a freshly created cart expires ~30 days from now.
+    long cartUuid = System.currentTimeMillis() * 1000L + (System.nanoTime() % 1000L);
+    jdbc.update(
+        "INSERT INTO carts (uuid, tenant_id, status, expires_at) VALUES (?, 'default', 'ANONYMOUS', now() + INTERVAL '30 days')",
+        cartUuid);
+    Integer freshExpires =
+        jdbc.queryForObject(
+            "SELECT (expires_at > now() + INTERVAL '29 days' AND expires_at < now() + INTERVAL '31 days')::int"
+                + " FROM carts WHERE uuid = ?",
+            Integer.class,
+            cartUuid);
+    assertThat(freshExpires).isEqualTo(1);
+  }
 }

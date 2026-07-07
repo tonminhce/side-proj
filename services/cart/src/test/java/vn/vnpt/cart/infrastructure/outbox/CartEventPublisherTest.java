@@ -6,28 +6,32 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.ObjectMapper;
 import vn.vnpt.cart.application.port.OutboxPublisher;
 import vn.vnpt.cart.domain.Cart;
+import vn.vnpt.cart.domain.CartLine;
 import vn.vnpt.cart.domain.CartStatus;
+import vn.vnpt.cart.domain.event.CartExpiredEvent;
+import vn.vnpt.cart.domain.event.CartLineAddedEvent;
 import vn.vnpt.cart.domain.event.CartMergedEvent;
 import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
 
 /**
- * HMAC signing + outbox dispatch — Story 2.1 / FR-14, ADR-20 (producer half).
+ * HMAC signing + outbox dispatch — Story 2.1 / FR-14, ADR-20 (producer half); extended in
+ * Story 2.2 with FR-17 ({@code cart.line.added}) and FR-18 ({code cart.expired}).
  *
  * <p>Unit test (no Spring context). Verifies: (1) the signatures map carries a non-empty HMAC that
  * matches {@link HmacEventSigner#verify} over the JCS-canonical payload, (2) the outbox is called
- * with {@code aggregateType="Cart"} + {@code eventType="cart.merged"} + the signed event.
+ * with {@code aggregateType="Cart"} + correct event-type + the signed event.
  */
 @ExtendWith(MockitoExtension.class)
 class CartEventPublisherTest {
@@ -36,7 +40,6 @@ class CartEventPublisherTest {
 
   @Mock OutboxPublisher outbox;
   private final ObjectMapper objectMapper = new ObjectMapper();
-  private CartEventPublisher publisher;
 
   private CartEventPublisher newPublisher() {
     CartEventPublisher p = new CartEventPublisher(outbox, objectMapper);
@@ -56,9 +59,15 @@ class CartEventPublisherTest {
     return c;
   }
 
+  private CartLine line(long variantId, int qty) {
+    CartLine l = CartLine.builder().cartUuid(200L).variantId(variantId).quantity(qty).build();
+    l.setUuid(300L);
+    return l;
+  }
+
   @Test
   void publishCartMerged_signsPayload_andDispatchesToOutbox() {
-    publisher = newPublisher();
+    CartEventPublisher publisher = newPublisher();
     Cart source = source();
     Cart target = target();
 
@@ -86,10 +95,7 @@ class CartEventPublisherTest {
     assertThat(sigs).containsKey("hmac_sha256");
     assertThat(sigs.get("hmac_sha256")).isNotBlank();
 
-    // Re-derive the signature over the same JCS payload and confirm it matches.
     String signature = sigs.get("hmac_sha256");
-    // The signatures map is OUT of the canonical payload (ADR-20 producer half) — re-derive
-    // canonical JSON over the unsigned event fields.
     CartMergedEvent unsigned = withNullSignatures(signed);
     Map<String, Object> map = objectMapper.convertValue(unsigned, Map.class);
     String canonical = JcsCanonicalJson.serialize(map);
@@ -98,7 +104,7 @@ class CartEventPublisherTest {
 
   @Test
   void publishCartMerged_differentSources_produceDifferentSignatures() {
-    publisher = newPublisher();
+    CartEventPublisher publisher = newPublisher();
     Cart sourceA = source();
     sourceA.setUuid(101L);
     Cart sourceB = source();
@@ -114,6 +120,71 @@ class CartEventPublisherTest {
         .isNotEqualTo(sigsCaptor.getAllValues().get(1).get("hmac_sha256"));
   }
 
+  @Test
+  void publishLineAdded_signsAndAppendsToOutbox() {
+    CartEventPublisher publisher = newPublisher();
+    Cart target = target();
+    CartLine line = line(1001L, 2);
+
+    publisher.publishLineAdded(target, line);
+
+    ArgumentCaptor<CartLineAddedEvent> eventCaptor = ArgumentCaptor.forClass(CartLineAddedEvent.class);
+    ArgumentCaptor<Map<String, String>> sigsCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(outbox)
+        .append(eq("Cart"), eq(200L), eq(CartEventPublisher.CART_LINE_ADDED_TOPIC), eventCaptor.capture(),
+            sigsCaptor.capture());
+
+    CartLineAddedEvent signed = eventCaptor.getValue();
+    assertThat(signed.getAggregateType()).isEqualTo("Cart");
+    assertThat(signed.getAggregateId()).isEqualTo(200L);
+    assertThat(signed.getCartUuid()).isEqualTo(200L);
+    assertThat(signed.getLineUuid()).isEqualTo(300L);
+    assertThat(signed.getVariantId()).isEqualTo(1001L);
+    assertThat(signed.getQuantity()).isEqualTo(2);
+    assertThat(signed.getTenantId()).isEqualTo("default");
+    assertThat(signed.getEventId()).isNotNull();
+
+    Map<String, String> sigs = sigsCaptor.getValue();
+    assertThat(sigs).containsKey("hmac_sha256");
+    String signature = sigs.get("hmac_sha256");
+    CartLineAddedEvent unsigned = lineAddedWithNullSignatures(signed);
+    Map<String, Object> map = objectMapper.convertValue(unsigned, Map.class);
+    String canonical = JcsCanonicalJson.serialize(map);
+    assertThat(HmacEventSigner.verify(canonical, signature, SECRET)).isTrue();
+  }
+
+  @Test
+  void publishCartExpired_signsAndAppendsToOutbox() {
+    CartEventPublisher publisher = newPublisher();
+    Cart target = target();
+    target.setExpiresAt(Instant.now().minusSeconds(60));
+
+    publisher.publishCartExpired(target, CartStatus.ACTIVE, 5);
+
+    ArgumentCaptor<CartExpiredEvent> eventCaptor = ArgumentCaptor.forClass(CartExpiredEvent.class);
+    ArgumentCaptor<Map<String, String>> sigsCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(outbox)
+        .append(eq("Cart"), eq(200L), eq(CartEventPublisher.CART_EXPIRED_TOPIC), eventCaptor.capture(),
+            sigsCaptor.capture());
+
+    CartExpiredEvent signed = eventCaptor.getValue();
+    assertThat(signed.getAggregateType()).isEqualTo("Cart");
+    assertThat(signed.getCartUuid()).isEqualTo(200L);
+    assertThat(signed.getUserId()).isEqualTo("user-1");
+    assertThat(signed.getPreviousStatus()).isEqualTo(CartStatus.ACTIVE);
+    assertThat(signed.getExpiredLinesCount()).isEqualTo(5);
+    assertThat(signed.getExpiresAt()).isNotNull();
+    assertThat(signed.getExpiredAt()).isNotNull();
+
+    Map<String, String> sigs = sigsCaptor.getValue();
+    assertThat(sigs).containsKey("hmac_sha256");
+    String signature = sigs.get("hmac_sha256");
+    CartExpiredEvent unsigned = expiredWithNullSignatures(signed);
+    Map<String, Object> map = objectMapper.convertValue(unsigned, Map.class);
+    String canonical = JcsCanonicalJson.serialize(map);
+    assertThat(HmacEventSigner.verify(canonical, signature, SECRET)).isTrue();
+  }
+
   private static CartMergedEvent withNullSignatures(CartMergedEvent e) {
     return CartMergedEvent.builder()
         .eventId(e.getEventId())
@@ -126,6 +197,39 @@ class CartEventPublisherTest {
         .targetCartUuid(e.getTargetCartUuid())
         .mergedLinesCount(e.getMergedLinesCount())
         .mergedAt(e.getMergedAt())
+        .tenantId(e.getTenantId())
+        .signatures(null)
+        .build();
+  }
+
+  private static CartLineAddedEvent lineAddedWithNullSignatures(CartLineAddedEvent e) {
+    return CartLineAddedEvent.builder()
+        .eventId(e.getEventId())
+        .aggregateType(e.getAggregateType())
+        .aggregateId(e.getAggregateId())
+        .occurredAt(e.getOccurredAt())
+        .cartUuid(e.getCartUuid())
+        .lineUuid(e.getLineUuid())
+        .variantId(e.getVariantId())
+        .quantity(e.getQuantity())
+        .tenantId(e.getTenantId())
+        .signatures(null)
+        .build();
+  }
+
+  private static CartExpiredEvent expiredWithNullSignatures(CartExpiredEvent e) {
+    return CartExpiredEvent.builder()
+        .eventId(e.getEventId())
+        .aggregateType(e.getAggregateType())
+        .aggregateId(e.getAggregateId())
+        .occurredAt(e.getOccurredAt())
+        .cartUuid(e.getCartUuid())
+        .guestCartId(e.getGuestCartId())
+        .userId(e.getUserId())
+        .previousStatus(e.getPreviousStatus())
+        .expiredLinesCount(e.getExpiredLinesCount())
+        .expiresAt(e.getExpiresAt())
+        .expiredAt(e.getExpiredAt())
         .tenantId(e.getTenantId())
         .signatures(null)
         .build();

@@ -100,6 +100,22 @@ else
   printf '~ cart: cart_db not provisioned yet (run migrations / start cart service)\n'
 fi
 
+# 1i. Story 2.2 / FR-17 — cart.line.added event topic reachable. Empty result is acceptable on a
+#     fresh DB (no line-add yet); the end-to-end emission is exercised by cart_expiry_smoke.sh.
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_CART_USER:-cart_user}" -d "${POSTGRES_CART_DB:-cart_db}" -tAc "SELECT 1 FROM outbox WHERE event_type = 'cart.line.added' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: cart.line.added events emitted (FR-17 wired)"
+else
+  printf '~ cart: cart.line.added events not yet emitted (no line-add smoke run yet)\n'
+fi
+
+# 1j. Story 2.2 / FR-18 — cart.expired event topic reachable. Empty result is acceptable on a
+#     fresh DB (no expiry yet); the end-to-end emission is exercised by cart_expiry_smoke.sh.
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_CART_USER:-cart_user}" -d "${POSTGRES_CART_DB:-cart_db}" -tAc "SELECT 1 FROM outbox WHERE event_type = 'cart.expired' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: cart.expired events emitted (FR-18 wired)"
+else
+  printf '~ cart: cart.expired events not yet emitted (no expiry smoke run yet)\n'
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"

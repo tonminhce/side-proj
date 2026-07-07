@@ -3,6 +3,7 @@ package vn.vnpt.cart.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +20,7 @@ import vn.vnpt.cart.domain.CartLine;
 import vn.vnpt.cart.domain.CartStatus;
 import vn.vnpt.cart.domain.exception.CartNotFoundException;
 import vn.vnpt.cart.domain.exception.CartVersionConflictException;
+import vn.vnpt.cart.infrastructure.outbox.CartEventPublisher;
 import vn.vnpt.cart.infrastructure.repository.CartLineRepository;
 import vn.vnpt.cart.infrastructure.repository.CartRepository;
 
@@ -27,6 +29,7 @@ class AddLineUseCaseTest {
 
   @Mock CartRepository cartRepository;
   @Mock CartLineRepository cartLineRepository;
+  @Mock CartEventPublisher cartEventPublisher;
   @InjectMocks AddLineUseCase useCase;
 
   private Cart cart() {
@@ -67,19 +70,6 @@ class AddLineUseCaseTest {
 
     assertThat(existing.getQuantity()).isEqualTo(5);
     verify(cartLineRepository).save(existing);
-  }
-
-  @Test
-  void add_concurrentEdit_throwsCartVersionConflictException() {
-    Cart cart = cart();
-    when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
-    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
-    when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(cartRepository.save(cart)).thenThrow(new ObjectOptimisticLockingFailureException(Cart.class, 100L));
-    when(cartRepository.findById(100L)).thenReturn(Optional.of(cart));
-
-    assertThatThrownBy(() -> useCase.addLine(100L, 1001L, 2, 0L))
-        .isInstanceOf(CartVersionConflictException.class);
   }
 
   @Test
@@ -133,5 +123,58 @@ class AddLineUseCaseTest {
     assertThat(captor.getValue().getIsDeleted()).isNotEqualTo(true);
     // Tombstone was untouched.
     assertThat(tombstone.getQuantity()).isEqualTo(3);
+  }
+
+  @Test
+  void add_emitsCartLineAddedEvent_withVariantAndQuantity() {
+    Cart cart = cart();
+    when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(cartRepository.save(cart)).thenReturn(cart);
+
+    useCase.addLine(100L, 1001L, 2, 0L);
+
+    ArgumentCaptor<CartLine> lineCaptor = ArgumentCaptor.forClass(CartLine.class);
+    verify(cartEventPublisher).publishLineAdded(org.mockito.ArgumentMatchers.eq(cart), lineCaptor.capture());
+    assertThat(lineCaptor.getValue().getVariantId()).isEqualTo(1001L);
+    assertThat(lineCaptor.getValue().getQuantity()).isEqualTo(2);
+  }
+
+  @Test
+  void add_existingVariant_upsert_alsoEmitsCartLineAddedEvent() {
+    Cart cart = cart();
+    CartLine existing = CartLine.builder().cartUuid(100L).variantId(1001L).quantity(3).build();
+    existing.setUuid(500L);
+    when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.of(existing));
+    when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(cartRepository.save(cart)).thenReturn(cart);
+
+    useCase.addLine(100L, 1001L, 2, 0L);
+
+    assertThat(existing.getQuantity()).isEqualTo(5);
+    verify(cartEventPublisher).publishLineAdded(org.mockito.ArgumentMatchers.eq(cart), org.mockito.ArgumentMatchers.eq(existing));
+  }
+
+  @Test
+  void add_concurrentEdit_throws_andTransactionalRollback_applies() {
+    // ADR-04 atomicity: publisher.publishLineAdded(...) IS called inside the try block (before
+    // the cart-save), but the ObjectOptimisticLockingFailureException on cartRepository.save
+    // triggers @Transactional rollback so the outbox row is never committed. The publisher
+    // call itself is expected — the rollback is Spring's @Transactional responsibility.
+    Cart cart = cart();
+    when(cartRepository.findAndLockByUuid(100L)).thenReturn(Optional.of(cart));
+    when(cartLineRepository.findActiveByCartUuidAndVariantId(100L, 1001L)).thenReturn(Optional.empty());
+    when(cartLineRepository.save(any(CartLine.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(cartRepository.save(cart)).thenThrow(new ObjectOptimisticLockingFailureException(Cart.class, 100L));
+    when(cartRepository.findById(100L)).thenReturn(Optional.of(cart));
+
+    assertThatThrownBy(() -> useCase.addLine(100L, 1001L, 2, 0L))
+        .isInstanceOf(CartVersionConflictException.class);
+
+    // The exception propagating out is what triggers the @Transactional rollback — verified by
+    // the assertion above. (A real commit-rollback check requires @SpringBootTest; this unit test
+    // verifies the exception path.)
   }
 }

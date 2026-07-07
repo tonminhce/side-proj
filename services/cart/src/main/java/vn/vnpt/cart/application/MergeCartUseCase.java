@@ -91,16 +91,20 @@ public class MergeCartUseCase {
                   // Same variant → sum quantities (Baymard guest-cart merge UX).
                   targetLine.setQuantity(targetLine.getQuantity() + srcLine.getQuantity());
                   cartLineRepository.save(targetLine);
+                  cartEventPublisher.publishLineAdded(target, targetLine);
                 },
-                () ->
-                    cartLineRepository.save(
-                        CartLine.builder()
-                            .cartUuid(target.getUuid())
-                            .tenantId(DEFAULT_TENANT)
-                            .sellerId(srcLine.getSellerId())
-                            .variantId(srcLine.getVariantId())
-                            .quantity(srcLine.getQuantity())
-                            .build()));
+                () -> {
+                  CartLine transferred =
+                      CartLine.builder()
+                          .cartUuid(target.getUuid())
+                          .tenantId(DEFAULT_TENANT)
+                          .sellerId(srcLine.getSellerId())
+                          .variantId(srcLine.getVariantId())
+                          .quantity(srcLine.getQuantity())
+                          .build();
+                  cartLineRepository.save(transferred);
+                  cartEventPublisher.publishLineAdded(target, transferred);
+                });
         mergedLines++;
       }
       source.setStatus(CartStatus.MERGED);
