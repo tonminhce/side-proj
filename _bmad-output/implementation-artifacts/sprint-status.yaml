@@ -17,7 +17,7 @@ last_updated: 2026-07-07  # story-automator-review — Story 2.3 status → done
 # Long keys are allowed; uniqueness is what matters.
 
 generated: 2026-07-06
-last_updated: 2026-07-07  # dev-story — Story 2.5 status → review
+last_updated: 2026-07-07  # create-story — Story 3.1 status → ready-for-dev; epic-3 → in-progress
 project: side-project
 project_key: NOKEY
 tracking_system: file-system
@@ -48,8 +48,8 @@ development_status:
   2-4-checkoutservice-owns-stripe-paymentintent-lifecycle-fr-20: in-progress  # story-automator-review 2026-07-07 — 0 fixed / 6 review items created; CRITICAL: (C1) 3 Testcontainers tests actually fail with ObjectOptimisticLockingFailureException — story's "35/35 green" claim is false (actual 33/36); (C2) idempotency key uses freshly-generated Snowflake per call, defeating NFR-IDEM-2 (dev's Completion Notes say cartUuid but code uses Snowflake — internal contradiction); HIGH: no regression test for stability across retries; MEDIUM: CheckoutControllerExceptionHandlerTest.java missing from File List; LOW: regex assertion hides the bug; cart 97/97 + inventory 238/238 + util 57/57 baselines preserved; 17 modules preserved
   2-5-saga-orchestrator-spring-modulith-outbox-state-machine-fr-22-fr-23-q1-binding: done  # story-automator-review 2026-07-07 — 1 CRITICAL + 2 MEDIUM auto-fixed (handleInsufficientStock REQUIRES_NEW removed — was creating orphan rows + inconsistent Order state vs transition log; resumeFromCreated no longer marks FAILED on missing cartLines; dead code + fake Timer removed); 51 saga-specific tests pass + full checkout 87/87 minus 1 pre-existing c1b1827 fallout (CheckoutControllerTest.postStart_invalidRequest_returns400); util 57/57 baseline preserved
   epic-2-retrospective: optional
-  epic-3: backlog  # Epic 3: Pay Securely
-  3-1-paymentservice-stable-idempotency-key-fr-25-solves-di-02-root-cause: backlog
+  epic-3: in-progress  # Epic 3: Pay Securely  # create-story — Story 3.1 status → ready-for-dev
+  3-1-paymentservice-stable-idempotency-key-fr-25-solves-di-02-root-cause: review  # dev-story 2026-07-07 — 30/30 tests green; util 57/57 baseline preserved; runtime smoke exits 0; 4 deviations flagged for review (no local BaseEntity, no @SpringBootTest slice, tightened ArchUnit, PaymentModulithConfig added)
   3-2-stripe-webhook-dedup-fr-26-solves-r-03: backlog
   3-3-stripe-elements-iframe-integration-fr-24-fr-29-fr-79-solves-r-15: backlog
   3-4-gateway-rate-limiter-with-bin-velocity-check-fr-81-solves-r-05: backlog

@@ -1,0 +1,101 @@
+# services/payment/src/main/resources/application.yml — Story 3.1
+# Per-service datasource. Defaults match dev/postgres-init entries; prod secrets come from Vault
+# (ADR-21). No real secrets in this file.
+
+server:
+  port: 8086   # PaymentService: 8086. catalog 8081, admin-bff 8082, inventory 8083, checkout 8084, cart 8085.
+
+spring:
+  application:
+    name: payment
+
+  main:
+    # util's library beans intentionally override Spring Boot autoconfig beans; allow it.
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    # Same Modulith bridge exclusion as cart / checkout / catalog: our ModulithOutboxPublisher
+    # writes the canonical `outbox` table directly. The bridge's JDBC EventPublicationRepository
+    # (which expects its own EVENT_PUBLICATION column shape) is excluded. The in-process
+    # @ApplicationModuleListener leg (spring-modulith-events-core) stays intact for Story 3.5.
+    # util's UtilsAutoConfiguration has the pre-existing FileProperties/FolderProperties/
+    # TelegramProperties @Component-vs-@ConfigurationProperties dual-bean bug; mirror catalog's
+    # dev-workaround and exclude it in dev/test profiles. Payment doesn't need any util beans
+    # (SnowflakeIdGenerator, BaseEntity are pulled in directly via JPA / Lombok).
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_PAYMENT_DB:payment_db}
+    username: ${POSTGRES_PAYMENT_USER:payment_user}
+    password: ${POSTGRES_PAYMENT_PASSWORD:payment_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns schema; JPA validates entity <-> table mapping.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # architecture.md anti-pattern guard: never auto-open a transaction in the view layer.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    # payment migrations live under db/migration/payment/ (sub-folder) to avoid classpath
+    # collisions with sibling service migrations when a downstream service depends on both.
+    locations: classpath:db/migration/payment
+    baseline-on-migrate: true
+    table: flyway_schema_history
+
+  # Spring Modulith outbox bridge — ADR-01 / ADR-14 / ADR-20.
+  modulith:
+    events:
+      jdbc:
+        poll-interval: 500ms   # architecture-detail.md line 146 (ADR-14 operational)
+      outbox:
+        publish-backpressure-threshold: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # AC #1 / #11 /actuator/health; Story 10.1 expands the surface.
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    vn.vnpt.payment: INFO
+    org.springframework.modulith: INFO
+
+# util's FolderProperties / FileProperties require these (Story 0.5's pre-existing
+# @Component-vs-@ConfigurationProperties bug — see dev README workaround).
+folder:
+  folderTemp: /tmp/payment/tmp
+  folderTemplate: /tmp/payment/templates
+  temp:
+    timeToLive: 60000
+file:
+  end-point: http://localhost:9000
+  access-key: minio
+  secret-key: minio123
+  bucket-name: payment-files
+  public-bucket-name: payment-files-public
+  dvc-bucket-name: payment-files-dvc
+  sub-directory: payment
+telegram:
+  error-bot-token: dev-placeholder
+  error-group-chat-id: "0"
+  is-send-error: false
+
+tenants:
+  datasources:
+    default:
+      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_PAYMENT_DB:payment_db}
+      driverClassName: org.postgresql.Driver
+      username: ${POSTGRES_PAYMENT_USER:payment_user}
+      password: ${POSTGRES_PAYMENT_PASSWORD:payment_pass}

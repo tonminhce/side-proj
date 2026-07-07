@@ -29,6 +29,7 @@ spring:
     # removing this exclude and aligning the schema.
     exclude:
       - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+      - vn.vnpt.util.UtilsAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_INVENTORY_DB:inventory_db}
@@ -115,7 +116,7 @@ logging:
 tenants:
   datasources:
     default:
-      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${INVENTORY_DB:inventory_db}
-      driverClassName: org.postgresql.Driver
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${INVENTORY_DB:inventory_db}
       username: ${INVENTORY_USER:inventory_user}
       password: ${INVENTORY_PASSWORD:inventory_pass}
+      driver-class-name: org.postgresql.Driver

@@ -22,7 +22,6 @@ import vn.vnpt.util.telegram.TelegramBotAPIUtil;
 @Slf4j
 @RequiredArgsConstructor
 @Configuration
-@ComponentScan
 @EnableConfigurationProperties({
   FileProperties.class,
   FolderProperties.class,

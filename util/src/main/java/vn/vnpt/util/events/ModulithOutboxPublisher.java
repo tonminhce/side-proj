@@ -1,6 +1,7 @@
 package vn.vnpt.util.events;
 
 import tools.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.avro.specific.SpecificRecord;
@@ -8,6 +9,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.modulith.events.core.DefaultEventPublicationRegistry;
+import org.springframework.modulith.events.core.EventPublicationRegistry;
 import org.springframework.modulith.events.core.EventPublicationRepository;
 import org.springframework.modulith.events.core.EventSerializer;
 import org.springframework.stereotype.Component;
@@ -97,6 +100,11 @@ public abstract class ModulithOutboxPublisher {
     @Bean
     EventPublicationRepository eventPublicationRepository() {
       return NoOpEventPublicationRepository.INSTANCE;
+    }
+
+    @Bean
+    EventPublicationRegistry eventPublicationRegistry(EventPublicationRepository repository) {
+      return new DefaultEventPublicationRegistry(repository, Clock.systemUTC());
     }
   }
 }
