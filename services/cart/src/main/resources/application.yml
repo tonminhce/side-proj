@@ -20,6 +20,7 @@ spring:
     # @ApplicationModuleListener leg (spring-modulith-events-core) stays intact.
     exclude:
       - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+      - vn.vnpt.util.UtilsAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CART_DB:cart_db}
@@ -80,3 +81,12 @@ logging:
   level:
     vn.vnpt.cart: INFO
     org.springframework.modulith: INFO
+
+
+tenants:
+  datasources:
+    default:
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${CART_DB:cart_db}
+      username: ${CART_USER:cart_user}
+      password: ${CART_PASSWORD:cart_pass}
+      driver-class-name: org.postgresql.Driver

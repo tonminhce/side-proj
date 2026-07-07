@@ -20,6 +20,7 @@ spring:
     # @ApplicationModuleListener leg (spring-modulith-events-core) stays intact.
     exclude:
       - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+      - vn.vnpt.util.UtilsAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CHECKOUT_DB:checkout_db}
@@ -79,3 +80,11 @@ logging:
   level:
     vn.vnpt.checkout: INFO
     org.springframework.modulith: INFO
+
+tenants:
+  datasources:
+    default:
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${CHECKOUT_DB:checkout_db}
+      username: ${CHECKOUT_USER:checkout_user}
+      password: ${CHECKOUT_PASSWORD:checkout_pass}
+      driver-class-name: org.postgresql.Driver

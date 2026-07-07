@@ -29,6 +29,7 @@ spring:
     # and aligning the schema.
     exclude:
       - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+      - vn.vnpt.util.UtilsAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CATALOG_DB:catalog_db}
@@ -88,3 +89,18 @@ logging:
     vn.vnpt.catalog: INFO
     # Modulith logs the package-boundary map at startup; useful for AC #2 verify.
     org.springframework.modulith: INFO
+
+# util/UtilsAutoConfiguration pre-existing bug (FileProperties @Component + @Configuration
+# conflict). Workaround per dev runtime-smoke: exclude util's autoconfig entirely in dev/test
+# profiles. Spring Boot then uses spring.datasource.* (above) directly for Flyway + JPA.
+# Tradeoff: util's RedisConfig + ModulithBridgeSupport are NOT auto-loaded in dev — but the
+# services under smoke test (catalog, inventory, cart, checkout) don't depend on those beans
+# during boot. Story X.Y will fix util's @Component-vs-@ConfigurationProperties bug.
+
+tenants:
+  datasources:
+    default:
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${CATALOG_DB:catalog_db}
+      username: ${CATALOG_USER:catalog_user}
+      password: ${CATALOG_PASSWORD:catalog_pass}
+      driver-class-name: org.postgresql.Driver
