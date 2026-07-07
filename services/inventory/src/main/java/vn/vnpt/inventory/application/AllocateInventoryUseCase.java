@@ -2,12 +2,10 @@ package vn.vnpt.inventory.application;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
@@ -16,6 +14,7 @@ import vn.vnpt.inventory.domain.InventoryReservation;
 import vn.vnpt.inventory.domain.ReservationStatus;
 import vn.vnpt.inventory.domain.event.InventoryLifecycleEvent;
 import vn.vnpt.inventory.domain.event.LifecyclePhase;
+import vn.vnpt.inventory.domain.exception.ReservationNotFoundException;
 import vn.vnpt.inventory.infrastructure.outbox.LifecycleEventPublisher;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
 import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepository;
@@ -24,25 +23,30 @@ import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
 
 /**
- * ReleaseInventoryUseCase — Story 1.6 / FR-9 (DI-01 root-cause fix), ADR-04, ADR-11. Migrated
- * in Story 1.8 / FR-11 to emit the unified {@link InventoryLifecycleEvent} via the
- * {@link LifecycleEventPublisher} (dual-publishes {@code inventory.released} as a legacy alias).
+ * AllocateInventoryUseCase — Story 1.8 / FR-11 (ALLOCATED phase).
  *
- * <p>Two entry points:
+ * <p>Promotes an ACTIVE reservation to COMMITTED (a saga step invoked by OrderService after
+ * successful payment authorization in Story 2.5). The allocation:
  *
- * <ul>
- *   <li>{@link #release(String)} — saga-initiated (cart cancelled, saga timeout). Story 2.5
- *       calls this from the checkout saga.
- *   <li>{@link #releaseExpired(Long)} — sweeper-initiated (TTL expiry). Each invocation is its
- *       own transaction ({@code Propagation.REQUIRES_NEW}) so a slow release on one reservation
- *       doesn't poison the rest of the sweeper batch.
- * </ul>
+ * <ol>
+ *   <li>Loads the reservation by {@code uuid}. Missing → {@link ReservationNotFoundException}.
+ *   <li>Terminal-state guard: {@code status != ACTIVE} → log + no-op (idempotency on
+ *       already-committed or already-released reservations).
+ *   <li>Appends an {@code inventory_ledger} row with {@code reason='allocate', delta=-quantity}.
+ *   <li>Sets {@code reservation.status = COMMITTED}.
+ *   <li>Emits an {@link InventoryLifecycleEvent} with {@code phase = ALLOCATED} via the
+ *       {@link LifecycleEventPublisher}.
+ * </ol>
+ *
+ * <p>Idempotency: the saga retries with the same {@code saga_step_id} hit the terminal-state
+ * guard (no-op on COMMITTED). A future Story 4.x adds an explicit
+ * {@code (reservationUuid, sagaStepId)} UNIQUE for stronger guarantee; not in v1.
  */
 @Service
 @Transactional
 @RequiredArgsConstructor
 @Slf4j
-public class ReleaseInventoryUseCase {
+public class AllocateInventoryUseCase {
 
   private final InventoryReservationRepository reservationRepository;
   private final InventoryLedgerEntryRepository ledgerRepository;
@@ -52,63 +56,58 @@ public class ReleaseInventoryUseCase {
   @Value("${inventory.events.hmac-secret}")
   private String inventoryServiceSecret;
 
-  @Transactional
-  public void release(String sagaStepId) {
-    Optional<InventoryReservation> opt =
-        reservationRepository.findBySagaStepId(sagaStepId);
-    if (opt.isEmpty()) {
-      log.debug("release: saga_step_id={} not found; no-op", sagaStepId);
-      return;
+  public InventoryReservation allocate(AllocateInventoryCommand cmd) {
+    if (cmd.reservationUuid() == null) {
+      throw new IllegalArgumentException("reservationUuid is required");
     }
-    doRelease(opt.get());
-  }
-
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void releaseExpired(Long reservationUuid) {
-    Optional<InventoryReservation> opt = reservationRepository.findById(reservationUuid);
-    if (opt.isEmpty()) {
-      log.debug("releaseExpired: reservationUuid={} not found; no-op", reservationUuid);
-      return;
+    if (cmd.sagaStepId() == null || cmd.sagaStepId().isBlank()) {
+      throw new IllegalArgumentException("sagaStepId is required");
     }
-    doRelease(opt.get());
-  }
 
-  private void doRelease(InventoryReservation reservation) {
+    InventoryReservation reservation =
+        reservationRepository
+            .findById(cmd.reservationUuid())
+            .orElseThrow(() -> new ReservationNotFoundException(cmd.reservationUuid()));
+
+    // Terminal-state guard: idempotent re-allocate is a no-op (matches Release's pattern).
     if (reservation.getStatus() != null && reservation.getStatus().isTerminal()) {
       log.debug(
-          "release: reservationUuid={} already terminal (status={}); no-op",
+          "allocate: reservationUuid={} already terminal (status={}); no-op",
           reservation.getUuid(),
           reservation.getStatus());
-      return;
+      return reservation;
     }
 
-    long releaseEventId = SnowflakeIdGenerator.generateId();
+    long ledgerEventId = SnowflakeIdGenerator.generateId();
     ledgerRepository.save(
         InventoryLedgerEntry.builder()
             .variantId(reservation.getVariantId())
             .warehouseId(reservation.getWarehouseId())
-            .delta(reservation.getQuantity())
-            .reason(InventoryReason.RELEASE.toColumnValue())
-            .eventId(releaseEventId)
+            .delta(-reservation.getQuantity())
+            .reason(InventoryReason.ALLOCATE.toColumnValue())
+            .eventId(ledgerEventId)
             .tenantId("default")
             .build());
 
-    reservation.setStatus(ReservationStatus.RELEASED);
+    reservation.setStatus(ReservationStatus.COMMITTED);
     reservationRepository.save(reservation);
 
+    // ponytail: build the payload WITHOUT signatures first so we can canonicalize + sign,
+    // then re-build WITH the signatures attached. The HMAC envelope is computed over the
+    // business payload (signatures is a security envelope, not part of the business data).
     InventoryLifecycleEvent payload =
         InventoryLifecycleEvent.builder()
-            .eventId(releaseEventId)
+            .eventId(ledgerEventId)
             .aggregateType("InventoryReservation")
             .aggregateId(reservation.getUuid())
             .occurredAt(Instant.now())
-            .phase(LifecyclePhase.RELEASED)
+            .phase(LifecyclePhase.ALLOCATED)
             .reservationUuid(reservation.getUuid())
             .variantId(reservation.getVariantId())
             .warehouseId(reservation.getWarehouseId())
             .quantity(reservation.getQuantity())
-            .reason(InventoryReason.RELEASE.wireValue())
-            .sagaStepId(reservation.getSagaStepId())
+            .reason(InventoryReason.ALLOCATE.wireValue())
+            .sagaStepId(cmd.sagaStepId())
             .orderUuid(reservation.getOrderUuid())
             .tenantId("default")
             .build();
@@ -136,14 +135,16 @@ public class ReleaseInventoryUseCase {
     lifecycleEventPublisher.publish(signed);
 
     log.debug(
-        "Released: variantId={} warehouseId={} qty={} sagaStepId={} reservationUuid={}",
+        "Allocated: reservationUuid={} variantId={} warehouseId={} qty={}",
+        reservation.getUuid(),
         reservation.getVariantId(),
         reservation.getWarehouseId(),
-        reservation.getQuantity(),
-        reservation.getSagaStepId(),
-        reservation.getUuid());
+        reservation.getQuantity());
+
+    return reservation;
   }
 
+  /** Convert to {@code Map<String, Object>} then JCS-canonicalize — mirrors Story 1.6 producer. */
   private String canonicalize(Object payload) {
     Map<String, Object> map = objectMapper.convertValue(payload, Map.class);
     return JcsCanonicalJson.serialize(map);

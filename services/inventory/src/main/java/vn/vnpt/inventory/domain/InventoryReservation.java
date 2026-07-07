@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import vn.vnpt.util.common.entity.base.BaseEntity;
+import vn.vnpt.inventory.domain.annotation.IgnoreSoftUkAudit;
 
 /**
  * InventoryReservation — Story 1.6 / FR-9, ADR-12 (DI-01 root-cause fix).
@@ -37,9 +38,14 @@ import vn.vnpt.util.common.entity.base.BaseEntity;
  * {@code VARCHAR(32)} — Hibernate maps the enum constant name (e.g., {@code ACTIVE}) directly.
  * Adding a new status is a code change, not a migration — same convention as
  * {@link InventoryReason}.
+ *
+ * <p><b>Story 1.8 / FR-12:</b> {@code @IgnoreSoftUkAudit} — reservations are terminal-only
+ * by convention (status transitions, never row soft-delete). No soft-uniqueness invariant
+ * applies.
  */
 @Entity
 @Table(name = "inventory_reservation")
+@IgnoreSoftUkAudit
 @Getter
 @Setter
 @NoArgsConstructor

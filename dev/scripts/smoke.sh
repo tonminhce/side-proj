@@ -69,6 +69,28 @@ else
   report 1 "postgres: warehouses.region not seeded (V005 not applied)"
 fi
 
+# 1f. Story 1.8 / FR-12 — verify @SoftUk annotation on Warehouse (DI-09 regression guard).
+#     The annotation lives in compiled bytecode; javap reads the runtime annotations table.
+if [ -f "${PROJECT_DIR}/services/inventory/target/classes/vn/vnpt/inventory/domain/Warehouse.class" ]; then
+  if javap -p -v "${PROJECT_DIR}/services/inventory/target/classes/vn/vnpt/inventory/domain/Warehouse.class" 2>/dev/null | grep -q "SoftUk"; then
+    report 0 "inventory: @SoftUk annotation present on Warehouse (DI-09 bound)"
+  else
+    report 1 "inventory: @SoftUk annotation missing on Warehouse (DI-09 unbound)"
+  fi
+else
+  # ponytail: target/classes may not exist on a fresh dev checkout — skip if so.
+  printf '~ inventory: @SoftUk check skipped (target/classes not built yet)\n'
+fi
+
+# 1g. Story 1.8 / FR-11 — verify lifecycle event topic emitted (any phase) since the last
+#     smoke run. Empty result is acceptable on a fresh DB (no operations yet); the check
+#     exists to verify the topic is reachable, not to require specific row counts.
+if dc exec -T postgres psql -h localhost -U "${POSTGRES_INVENTORY_USER:-inventory_user}" -d "${POSTGRES_INVENTORY_DB:-inventory_db}" -tAc "SELECT 1 FROM outbox WHERE event_type = 'inventory.lifecycle' LIMIT 1" 2>/dev/null | grep -q '^1$'; then
+  report 0 "postgres: inventory.lifecycle events emitted (FR-11 wired)"
+else
+  printf '~ inventory: inventory.lifecycle events not yet emitted (no smoke run yet)\n'
+fi
+
 # 2. Kafka
 if dc exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
   report 0 "kafka: kafka-topics --list"

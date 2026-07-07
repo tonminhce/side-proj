@@ -125,13 +125,28 @@ class ReserveInventoryUseCaseTest {
             Integer.class);
     assertThat(ledgerReserveCount).isEqualTo(1);
 
-    // Outbox row: aggregate_type='InventoryReservation', event_type='inventory.reserved'.
+    // Outbox rows: Story 1.8 dual-publishes RESERVED to BOTH the unified `inventory.lifecycle`
+    // topic AND the legacy `inventory.reserved` topic (the Sprint 9 migration window).
+    // The aggregate_type is 'InventoryReservation' on both rows; signatures are equal.
+    Integer legacyOutboxCount =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM outbox WHERE aggregate_id = ? AND event_type = 'inventory.reserved'",
+            Integer.class,
+            reservation.getUuid());
+    assertThat(legacyOutboxCount).isEqualTo(1);
+
+    Integer lifecycleOutboxCount =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM outbox WHERE aggregate_id = ? AND event_type = 'inventory.lifecycle'",
+            Integer.class,
+            reservation.getUuid());
+    assertThat(lifecycleOutboxCount).isEqualTo(1);
+
     Map<String, Object> outboxRow =
         jdbc.queryForMap(
-            "SELECT aggregate_type, event_type, payload, signatures FROM outbox WHERE aggregate_id = ?",
+            "SELECT aggregate_type, event_type, payload, signatures FROM outbox WHERE aggregate_id = ? AND event_type = 'inventory.lifecycle'",
             reservation.getUuid());
     assertThat(outboxRow.get("aggregate_type")).isEqualTo("InventoryReservation");
-    assertThat(outboxRow.get("event_type")).isEqualTo("inventory.reserved");
     assertThat(outboxRow.get("payload")).isNotNull();
     assertThat(outboxRow.get("signatures")).isNotNull();
   }

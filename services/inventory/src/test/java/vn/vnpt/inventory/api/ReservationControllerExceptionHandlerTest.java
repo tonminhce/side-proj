@@ -8,6 +8,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import vn.vnpt.inventory.domain.exception.InsufficientStockException;
+import vn.vnpt.inventory.domain.exception.ReservationNotFoundException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
 
 /**
@@ -74,5 +75,23 @@ class ReservationControllerExceptionHandlerTest {
     Map<String, Object> body = response.getBody();
     assertThat(body).isNotNull();
     assertThat(body.get("error")).isEqualTo("idempotency_conflict");
+  }
+
+  /**
+   * QA-pass gap — Story 1.8 added {@link ReservationNotFoundException} for the ALLOCATED
+   * path. The handler maps it to 404 with {@code error=reservation_not_found}. Direct unit
+   * test pins the mapping so a regression in the handler (or the exception class) is caught
+   * even if the controller wiring changes.
+   */
+  @Test
+  void reservationNotFound_mapsTo404() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleReservationNotFound(new ReservationNotFoundException(999_999L));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    Map<String, Object> body = response.getBody();
+    assertThat(body).isNotNull();
+    assertThat(body.get("error")).isEqualTo("reservation_not_found");
+    assertThat((String) body.get("message")).contains("999999");
   }
 }

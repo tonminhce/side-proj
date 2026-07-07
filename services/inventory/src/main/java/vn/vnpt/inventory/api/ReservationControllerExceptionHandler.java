@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vn.vnpt.inventory.domain.exception.InsufficientStockException;
+import vn.vnpt.inventory.domain.exception.ReservationNotFoundException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
 
 /**
@@ -19,6 +20,7 @@ import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
  *   <li>{@link InsufficientStockException} → 409 Conflict (the FR-9 binding — exactly one of N
  *       concurrent reserves returns 409).
  *   <li>{@link WarehouseNotFoundException} → 404 Not Found.
+ *   <li>{@link ReservationNotFoundException} → 404 Not Found (Story 1.8 / FR-11 ALLOCATED path).
  *   <li>{@link IllegalArgumentException} (validation) → 400 Bad Request.
  *   <li>{@link DataIntegrityViolationException} (e.g., duplicate {@code saga_step_id} from a
  *       saga retry race) → 409 Conflict.
@@ -68,6 +70,15 @@ public class ReservationControllerExceptionHandler {
     log.debug("404 warehouse_not_found: {}", e.getMessage());
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
         .body(Map.of("error", "warehouse_not_found", "message", e.getMessage()));
+  }
+
+  /** Story 1.8 / FR-11 — allocation on an unknown reservationUuid → 404. */
+  @ExceptionHandler(ReservationNotFoundException.class)
+  public ResponseEntity<Map<String, Object>> handleReservationNotFound(
+      ReservationNotFoundException e) {
+    log.debug("404 reservation_not_found: {}", e.getMessage());
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(Map.of("error", "reservation_not_found", "message", e.getMessage()));
   }
 
   @ExceptionHandler(IllegalArgumentException.class)

@@ -1,0 +1,54 @@
+-- =====================================================================
+-- V006__register_inventory_lifecycle_event_schema.sql
+-- Story 1.8 / FR-11 — unified `inventory.lifecycle` event topic (5 phases).
+-- Solves: FR-11 (downstream consumer lifecycle visibility).
+-- Bind:   ADR-04 outbox atomicity; ADR-15 Avro compat; ADR-20 HMAC signing.
+--
+-- This migration is a NO-OP DDL — the unified lifecycle event is wired
+-- entirely in code (Java record `InventoryLifecycleEvent` + enum
+-- `LifecyclePhase`). The outbox table from V001 already carries the
+-- `event_type VARCHAR` column; V006 is bookkeeping only so ops dashboards
+-- see "Event schema v1 added" in flyway_schema_history.
+--
+-- Apicurio artifact registration is gated by Story 0.4's CI step; the
+-- developer MUST register the InventoryLifecycleEvent AVSC before any
+-- outbox row with `event_type = 'inventory.lifecycle'` ships to the
+-- schema registry. The CI gate fails the build on missing registration.
+--
+-- Wire topic: `inventory.lifecycle` — replaces the Story 1.6 split into
+-- `inventory.reserved` / `inventory.released` for NEW emissions. For the
+-- one-Sprint transition window (Sprint 9 migration) the legacy topics
+-- remain live as dual-publish aliases; see LifecycleEventPublisher.
+--
+-- Phases (LifecyclePhase enum, SCREAMING_SNAKE_CASE wire values):
+--   RESERVED   — cart checkout holds stock (Story 1.6, dual-publish).
+--   RELEASED   — saga cancel OR sweeper TTL expiry (Story 1.6, dual-publish).
+--   ALLOCATED  — payment auth success promotes reservation to order (Story 1.8).
+--   SHIPPED    — warehouse picks + carrier dispatch (Story 1.8).
+--   ADJUSTED   — manual inventory correction (Story 1.5/1.8 emit shape).
+--
+-- JSON payload shape (matches the Java record InventoryLifecycleEvent):
+--   {
+--     "eventId":          <long>,    -- Snowflake outbox event id
+--     "aggregateType":    "InventoryReservation" | "InventoryLedger",
+--     "aggregateId":      <long>,    -- reservationUuid OR ledgerEntryUuid
+--     "occurredAt":       "<ISO-8601 instant>",
+--     "phase":            "RESERVED" | "RELEASED" | "ALLOCATED" | "SHIPPED" | "ADJUSTED",
+--     "reservationUuid":  <long?>,   -- present for RESERVED/RELEASED/ALLOCATED
+--     "variantId":        <long>,
+--     "warehouseId":      <long>,
+--     "quantity":         <long>,
+--     "reason":           "<lowercase reason string>",  -- InventoryReason.toColumnValue()
+--     "sagaStepId":       "<ADR-11 idempotency key?>", -- present for saga-driven phases
+--     "orderUuid":        <long?>,   -- present when order is known
+--     "tenantId":         "default",
+--     "signatures":       {"hmac_sha256": "<base64url>"}  -- ADR-20 producer HMAC
+--   }
+--
+-- Phase-specific nullable fields are OMITTED from JSON when null via
+-- @JsonInclude(JsonInclude.Include.NON_NULL) — keeps the wire shape compact.
+-- =====================================================================
+
+-- Flyway requires a non-empty body. The single-line SELECT 1 is the
+-- canonical "schema unchanged" sentinel.
+SELECT 1;

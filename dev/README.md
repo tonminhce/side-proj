@@ -76,6 +76,10 @@ A common startup hiccup: Kafka KRaft takes ~30 s to elect itself; the healthchec
 
 `warehouses.region` column + HCM-01 (`SOUTH`) + HN-01 (`NORTH`) seed rows — FR-10 multi-warehouse dispatch picks the in-region warehouse with enough stock; cross-region fallback emits a WARN log (Story 1.7).
 
+`inventory.lifecycle` event topic — Unified phase-aware topic carrying `phase ∈ {RESERVED, RELEASED, ALLOCATED, SHIPPED, ADJUSTED}`. Replaces the Story 1.6 split into `inventory.reserved`/`inventory.released` for new emissions; legacy topics remain live for Sprint 9 migration window (Story 9.x will cut them over).
+
+`@SoftUk` audit on `services/inventory/.../domain/...` — every soft-deletable JPA entity (extends `RootEntity`) MUST carry `@SoftUk` or `@SoftUks` (or `@IgnoreSoftUkAudit` with justification). `Warehouse` carries `@SoftUk(name="warehouse_code_per_tenant", fields={"tenantId","code"})`. Append-only + terminal-only entities opt out via `@IgnoreSoftUkAudit` + JavaDoc justification. Solves DI-09.
+
 On subsequent starts the init scripts do NOT re-run; destroying the `pg-data` volume (`docker compose down -v`) recreates everything from scratch. To recreate a single service's database without wiping the others, connect as the `postgres` superuser and `DROP DATABASE` + re-run the matching `dev/postgres-init/*.sql` snippet manually.
 
 ## Read admin view (Story 1.4 / FR-6)

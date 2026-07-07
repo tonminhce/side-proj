@@ -95,7 +95,8 @@ class AdjustInventoryUseCaseTest {
             saved.getUuid());
     assertThat(outboxRow.get("aggregate_type")).isEqualTo("InventoryLedger");
     assertThat(((Number) outboxRow.get("aggregate_id")).longValue()).isEqualTo(saved.getUuid());
-    assertThat(outboxRow.get("event_type")).isEqualTo("inventory.receive");
+    // Story 1.8: events emit to unified `inventory.lifecycle` topic (with phase=ADJUSTED).
+    assertThat(outboxRow.get("event_type")).isEqualTo("inventory.lifecycle");
   }
 
   @Test
@@ -140,5 +141,56 @@ class AdjustInventoryUseCaseTest {
             new AdjustInventoryCommand(100L, warehouseId, 5L, InventoryReason.RECEIVE));
 
     assertThat(saved.getTenantId()).isEqualTo("default");
+  }
+
+  /**
+   * Story 1.8 / FR-11 — adjust emits an {@code ADJUSTED} lifecycle event on the unified
+   * {@code inventory.lifecycle} topic (NOT the legacy {@code inventory.adjust} topic).
+   */
+  @Test
+  void adjust_emitsAdjustedLifecycleEvent() {
+    InventoryLedgerEntry saved =
+        useCase.adjust(new AdjustInventoryCommand(200L, warehouseId, 5L, InventoryReason.RECEIVE));
+
+    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+    Map<String, Object> row =
+        jdbc.queryForMap(
+            "SELECT event_type, aggregate_id FROM outbox WHERE aggregate_id = ?",
+            saved.getUuid());
+    assertThat(row.get("event_type")).isEqualTo("inventory.lifecycle");
+    assertThat(((Number) row.get("aggregate_id")).longValue()).isEqualTo(saved.getUuid());
+  }
+
+  /**
+   * QA-pass gap — the outbox payload JSON MUST carry {@code "phase":"ADJUSTED"}. The
+   * existing {@link #adjust_emitsAdjustedLifecycleEvent()} only asserts the {@code event_type}
+   * column; a regression that flipped the phase to {@code "RECEIVE"} (since
+   * {@code InventoryReason.RECEIVE} is the test's reason) would still pass {@code event_type
+   * ="inventory.lifecycle"} but downstream consumers filtering on phase would silently
+   * lose the event. Pin the JSON payload's phase field directly.
+   */
+  @Test
+  void adjust_outboxPayloadCarriesPhaseAdjusted() {
+    InventoryLedgerEntry saved =
+        useCase.adjust(new AdjustInventoryCommand(201L, warehouseId, -2L, InventoryReason.ADJUST));
+
+    JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+    String payload =
+        jdbc.queryForObject(
+            "SELECT payload::text FROM outbox WHERE aggregate_id = ?",
+            String.class,
+            saved.getUuid());
+    // postgres jsonb normalizes whitespace (space after colon); assert on each field key + value
+    // separately rather than the full key-value pair.
+    assertThat(payload).contains("\"phase\"").contains("ADJUSTED");
+    assertThat(payload).contains("\"aggregateType\"").contains("InventoryLedger");
+    assertThat(payload).contains("\"reason\"").contains("adjust");
+    // ADR-20: signatures column populated.
+    String signatures =
+        jdbc.queryForObject(
+            "SELECT signatures::text FROM outbox WHERE aggregate_id = ?",
+            String.class,
+            saved.getUuid());
+    assertThat(signatures).contains("hmac_sha256");
   }
 }

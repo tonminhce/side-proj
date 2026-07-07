@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # dev-story 1-7 — multi-warehouse per-variant stock (FR-10/ADR-06 stretch); region dispatch + per-warehouse breakdown GET; review
+last_updated: 2026-07-07  # story-automator review 1-8 — orphan deleted + File List reconciled; status done
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -39,7 +39,7 @@ development_status:
   1-5-inventoryservice-per-warehouse-ledger-fr-8: done  # story-automator review — CRITICAL CatalogEventListenerTest discovery bug + @Transactional REQUIRES_NEW fixed; tests 35/35; util baseline 57/57 preserved
   1-6-reservation-with-ttl-fr-9-solves-di-01-root-cause: done  # story-automator review — 4 HIGH fixed (findAvailable double-count, ADR-11 idempotency race in reserve, 2 stale JavaDocs); 3 MEDIUM fixed (controller test dead code, sweeper unusedPageRequest, idempotency_conflict body missing sagaStepId); 2 LOW fixed (sweeper log count, smoke script clarity); 0 CRITICAL remain
   1-7-multi-warehouse-per-variant-stock-fr-10: done  # story-automator review — 1 LOW fixed (OnHandUseCaseTest HN-B region SOUTH→NORTH); 188 inventory tests green (actual surefire count; +100 from @RepeatedTest); util 57/57 preserved; 17 modules preserved; 5/5 boundary rules
-  1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: backlog
+  1-8-inventory-lifecycle-events-fr-11-softuk-extension-fr-12-solves-di-09: done  # story-automator review 2026-07-07 — orphan InventoryAdjusted.java deleted + File List discrepancies corrected (1 HIGH + 3 MEDIUM); 238/238 inventory tests (188 baseline + 30 Story 1.8 + 20 QA pass); util 57/57 + catalog 65/65 preserved; 17 modules preserved; 7/7 boundary rules
   epic-1-retrospective: optional
   epic-2: backlog  # Epic 2: Add to Cart and Checkout
   2-1-cartservice-anonymous-merge-on-login-fr-14-fr-15-fr-16: backlog

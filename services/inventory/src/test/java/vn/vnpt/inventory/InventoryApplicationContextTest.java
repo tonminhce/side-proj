@@ -102,6 +102,16 @@ class InventoryApplicationContextTest {
     assertThat(count).isEqualTo(1);
   }
 
+  /** Story 1.8 — Flyway MUST have applied V006 (lifecycle event placeholder). */
+  @Test
+  void flywayAppliedV006() {
+    Integer count =
+        new JdbcTemplate(dataSource)
+            .queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '006'", Integer.class);
+    assertThat(count).isEqualTo(1);
+  }
+
   /**
    * Story 1.7 — V005 seeds HCM-01 (region=SOUTH) + HN-01 (region=NORTH). Migration's intent
    * is to give FR-10 dispatch two real warehouses to pick from. A regression that drops the

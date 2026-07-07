@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import vn.vnpt.util.common.entity.base.BaseEntity;
+import vn.vnpt.inventory.domain.annotation.IgnoreSoftUkAudit;
 
 /**
  * InventoryLedgerEntry — Story 1.5 / FR-8, FR-13 (append-only ledger), ADR-12.
@@ -32,9 +33,13 @@ import vn.vnpt.util.common.entity.base.BaseEntity;
  * {@code eventId} is omitted (see {@link AccessLevel#NONE}) so that app code cannot mutate it
  * after construction. Hibernate's reflection-based updates ignore this at the SQL layer;
  * the Java-level enforcement is for app code.
+ *
+ * <p><b>Story 1.8 / FR-12:</b> {@code @IgnoreSoftUkAudit} — the ledger is append-only by
+ * convention (rows are never soft-deleted). No soft-uniqueness invariant applies.
  */
 @Entity
 @Table(name = "inventory_ledger")
+@IgnoreSoftUkAudit
 @Getter
 @Setter
 @NoArgsConstructor

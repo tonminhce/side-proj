@@ -8,10 +8,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
+import vn.vnpt.inventory.application.query.AvailableStockView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.event.InventoryLifecycleEvent;
 import vn.vnpt.inventory.domain.event.LifecyclePhase;
+import vn.vnpt.inventory.domain.exception.InsufficientStockException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
 import vn.vnpt.inventory.infrastructure.outbox.LifecycleEventPublisher;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
@@ -21,79 +23,85 @@ import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
 
 /**
- * AdjustInventoryUseCase — Story 1.5 / FR-8, ADR-12. Extended in Story 1.8 / FR-11 to emit
- * the unified {@code ADJUSTED} phase via {@link LifecycleEventPublisher}.
+ * ShipInventoryUseCase — Story 1.8 / FR-11 (SHIPPED phase).
  *
- * <p>Appends one row to the {@code inventory_ledger} and emits an outbox event in the SAME
- * transaction (ADR-04 atomicity: business state + outbox are atomic). The ledger is the SOLE
- * source of truth for inventory state; {@code on_hand} is a sum-derivation, not a column.
+ * <p>Warehouse-level shipping: subtracts {@code quantity} units from a (variant, warehouse)
+ * pair and emits an {@link InventoryLifecycleEvent} with {@code phase = SHIPPED}. The
+ * canonical authoritative gate (FOR UPDATE row lock) lives in {@code ReserveInventoryUseCase};
+ * this use case does a pre-flight {@link OnHandUseCase#findAvailable} check and trusts the
+ * caller (the saga) to be the gating step.
  *
- * <p>PONYTAIL: this use case does NOT enforce {@code on_hand >= 0}. Negative deltas are valid for
- * {@code "adjust"} reasons (lost-in-warehouse, damaged goods). The canonical oversell guard is
- * Story 1.6's reservation path ({@code SELECT … FOR UPDATE} against a derived table); not this
- * story. Adding an inventory check here would duplicate the reservation logic and bypass the
- * saga.
- *
- * <p>Idempotency key: each call generates a fresh {@code eventId} via
- * {@link SnowflakeIdGenerator#generateId()}. The {@code outbox.event_id} and
- * {@code inventory_ledger.event_id} both carry this value; downstream consumers dedup on it.
+ * <p>YAGNI: no multi-line carrier integration (FR-35/36/37/38/39 live in Epic 4). No
+ * {@code shipped_at} column on the ledger — the event's {@code occurredAt} captures it.
  */
 @Service
 @Transactional
 @RequiredArgsConstructor
 @Slf4j
-public class AdjustInventoryUseCase {
+public class ShipInventoryUseCase {
 
-  private final InventoryLedgerEntryRepository ledgerRepository;
   private final WarehouseRepository warehouseRepository;
+  private final InventoryLedgerEntryRepository ledgerRepository;
+  private final OnHandUseCase onHandUseCase;
   private final LifecycleEventPublisher lifecycleEventPublisher;
   private final ObjectMapper objectMapper;
 
   @Value("${inventory.events.hmac-secret}")
   private String inventoryServiceSecret;
 
-  /**
-   * Persist a ledger entry and emit the {@code ADJUSTED} lifecycle event in the same
-   * transaction.
-   *
-   * @throws IllegalArgumentException if {@code delta == 0} or {@code reason == null}
-   * @throws WarehouseNotFoundException if {@code warehouseId} does not exist
-   */
-  public InventoryLedgerEntry adjust(AdjustInventoryCommand cmd) {
-    if (cmd.delta() == 0) {
-      throw new IllegalArgumentException("delta must be non-zero");
+  public InventoryLedgerEntry ship(ShipInventoryCommand cmd) {
+    if (cmd.variantId() == null) {
+      throw new IllegalArgumentException("variantId is required");
     }
-    if (cmd.reason() == null) {
-      throw new IllegalArgumentException("reason is required");
+    if (cmd.warehouseId() == null) {
+      throw new IllegalArgumentException("warehouseId is required");
     }
+    if (cmd.quantity() <= 0) {
+      throw new IllegalArgumentException("quantity must be > 0");
+    }
+    if (cmd.sagaStepId() == null || cmd.sagaStepId().isBlank()) {
+      throw new IllegalArgumentException("sagaStepId is required");
+    }
+
     warehouseRepository
         .findById(cmd.warehouseId())
         .orElseThrow(() -> new WarehouseNotFoundException(cmd.warehouseId()));
 
-    long eventId = SnowflakeIdGenerator.generateId();
-    String reasonColumnValue = cmd.reason().toColumnValue();
+    long available =
+        onHandUseCase
+            .findAvailable(cmd.variantId(), cmd.warehouseId())
+            .map(AvailableStockView::available)
+            .orElse(0L);
 
+    if (available < cmd.quantity()) {
+      throw new InsufficientStockException(
+          cmd.variantId(), cmd.warehouseId(), cmd.quantity(), available);
+    }
+
+    long ledgerEventId = SnowflakeIdGenerator.generateId();
     InventoryLedgerEntry entry =
         ledgerRepository.save(
             InventoryLedgerEntry.builder()
                 .variantId(cmd.variantId())
                 .warehouseId(cmd.warehouseId())
-                .delta(cmd.delta())
-                .reason(reasonColumnValue)
-                .eventId(eventId)
+                .delta(-cmd.quantity())
+                .reason(InventoryReason.SHIP.toColumnValue())
+                .eventId(ledgerEventId)
+                .tenantId("default")
                 .build());
 
     InventoryLifecycleEvent payload =
         InventoryLifecycleEvent.builder()
-            .eventId(eventId)
+            .eventId(ledgerEventId)
             .aggregateType("InventoryLedger")
             .aggregateId(entry.getUuid())
             .occurredAt(Instant.now())
-            .phase(LifecyclePhase.ADJUSTED)
+            .phase(LifecyclePhase.SHIPPED)
             .variantId(cmd.variantId())
             .warehouseId(cmd.warehouseId())
-            .quantity(cmd.delta())
-            .reason(reasonColumnValue)
+            .quantity(cmd.quantity())
+            .reason(InventoryReason.SHIP.wireValue())
+            .sagaStepId(cmd.sagaStepId())
             .tenantId("default")
             .build();
 
@@ -110,11 +118,19 @@ public class AdjustInventoryUseCase {
             .warehouseId(payload.getWarehouseId())
             .quantity(payload.getQuantity())
             .reason(payload.getReason())
+            .sagaStepId(payload.getSagaStepId())
             .tenantId(payload.getTenantId())
             .signatures(Map.of("hmac_sha256", signature))
             .build();
 
     lifecycleEventPublisher.publish(signed);
+
+    log.debug(
+        "Shipped: variantId={} warehouseId={} qty={} sagaStepId={}",
+        cmd.variantId(),
+        cmd.warehouseId(),
+        cmd.quantity(),
+        cmd.sagaStepId());
 
     return entry;
   }

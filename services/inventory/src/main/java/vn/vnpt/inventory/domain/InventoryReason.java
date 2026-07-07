@@ -32,4 +32,13 @@ public enum InventoryReason {
   public String toColumnValue() {
     return name().toLowerCase();
   }
+
+  /**
+   * Wire value for the lifecycle event payload — same lowercase string as {@link
+   * #toColumnValue()}. Named {@code wireValue()} for symmetry with the enum's role in the
+   * outbox {@code inventory.lifecycle} event (Story 1.8 / FR-11).
+   */
+  public String wireValue() {
+    return toColumnValue();
+  }
 }

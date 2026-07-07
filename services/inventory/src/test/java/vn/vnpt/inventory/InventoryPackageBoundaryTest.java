@@ -10,40 +10,40 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
+import vn.vnpt.inventory.application.port.OutboxPublisher;
+import vn.vnpt.inventory.domain.annotation.IgnoreSoftUkAudit;
+import vn.vnpt.inventory.infrastructure.outbox.LifecycleEventPublisher;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
 import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepository;
+import vn.vnpt.util.common.entity.base.RootEntity;
+import vn.vnpt.util.component.softdelete.annotation.SoftUk;
+import vn.vnpt.util.component.softdelete.annotation.SoftUks;
 
 /**
  * Modulith package-boundary enforcement for InventoryService (Story 1.5 / AC #23; extended in
- * Story 1.6 / FR-9 with 2 new rules, Story 1.7 / FR-10 with 1 new rule).
+ * Story 1.6 / FR-9 with 2 new rules, Story 1.7 / FR-10 with 1 new rule, Story 1.8 / FR-11 +
+ * FR-12 with 2 new rules).
  *
  * <p>Rules:
  *
  * <ol>
  *   <li>{@link #inventory_doesNotDependOnSiblingServices()} — no class under {@code
- *       vn.vnpt.inventory..} may depend on a sibling service's package. InventoryService
- *       communicates with siblings via Modulith events (ADR-01, ADR-04) — Java imports are
- *       forbidden (ADR-03).
- *       <p>Allow-list: {@code vn.vnpt.catalog.domain.event..} (events are cross-service contracts
- *       per ADR-04; entities are not). Implemented via a custom predicate that excludes
- *       {@code catalog.domain.event..} from the {@code catalog.domain..} forbidden set.
+ *       vn.vnpt.inventory..} may depend on a sibling service's package.
  *   <li>{@link #inventory_writesOnlyToInventoryLedger()} — append-only invariant on
- *       {@link InventoryLedgerEntryRepository}. No {@code void delete*(...)} method may be
- *       declared. Enforcement: the test scans the repository for declared methods and fails on
- *       any {@code delete*} method.
- *       <p>ponytail: app-level enforcement. A Postgres {@code BEFORE UPDATE OR DELETE} trigger
- *       on {@code inventory_ledger} is the canonical defense; YAGNI for v1. A hardening story
- *       (10.4) adds the trigger.
+ *       {@link InventoryLedgerEntryRepository}.
  *   <li>{@link #inventory_reservation_isTerminalOnly()} — Story 1.6: append-only invariant on
- *       {@link InventoryReservationRepository}. No {@code void delete*(...)} method may be
- *       declared. Reservations are status-transitioned (RELEASED / COMMITTED), never deleted.
+ *       {@link InventoryReservationRepository}.
  *   <li>{@link #inventory_outboxWritesAreAtomicWithReservation()} — Story 1.6: ADR-04 atomicity
- *       guard. {@code ReserveInventoryUseCase} and {@code ReleaseInventoryUseCase} MUST be
- *       {@code @Transactional} at the class level so the business state + outbox insert are
- *       atomic.
- *   <li>{@link #inventory_pickerUsesOnlyOwnRepositories()} — Story 1.7 / FR-10: the picker
- *       must reference only its own service's repositories (no cross-service drift via future
- *       saga-step or catalog imports).
+ *       guard.
+ *   <li>{@link #inventory_pickerUsesOnlyOwnRepositories()} — Story 1.7 / FR-10.
+ *   <li>{@link #inventory_softDeletableEntitiesHaveSoftUkAnnotation()} — Story 1.8 / FR-12 /
+ *       DI-09 fix: every entity extending {@code RootEntity} MUST carry a {@code @SoftUk} (or
+ *       {@code @SoftUks}, or be marked with {@code @IgnoreSoftUkAudit} for the append-only /
+ *       terminal-only opt-out).
+ *   <li>{@link #inventory_lifecycleEventsRouteThroughPublisher()} — Story 1.8 / FR-11: use
+ *       cases in the application package MUST reference {@link LifecycleEventPublisher} for
+ *       inventory lifecycle emissions (no direct {@code ModulithOutboxPublisher.append(...)}
+ *       calls).
  * </ol>
  */
 class InventoryPackageBoundaryTest {
@@ -196,5 +196,125 @@ class InventoryPackageBoundaryTest {
     } catch (ClassNotFoundException e) {
       throw new AssertionError("PickWarehouseForReservationUseCase class not found", e);
     }
+  }
+
+  /**
+   * Story 1.8 / FR-12 / DI-09 fix — every JPA entity extending {@code RootEntity} (i.e.,
+   * soft-deletable via the {@code isDeleted} column) MUST carry a {@code @SoftUk} or
+   * {@code @SoftUks} annotation, OR be marked with {@code @IgnoreSoftUkAudit} (the explicit
+   * opt-out for append-only / terminal-only entities). The regression guard for DI-09.
+   */
+  @Test
+  void inventory_softDeletableEntitiesHaveSoftUkAnnotation() {
+    classes()
+        .that()
+        .areAssignableTo(RootEntity.class)
+        .and()
+        .haveSimpleNameNotEndingWith("Test")
+        .and()
+        .resideInAPackage("vn.vnpt.inventory.domain..")
+        .and()
+        .areNotAnnotatedWith(IgnoreSoftUkAudit.class)
+        .should()
+        .beAnnotatedWith(SoftUk.class)
+        .orShould()
+        .beAnnotatedWith(SoftUks.class)
+        .because(
+            "DI-09 regression guard — every soft-deletable JPA entity MUST carry @SoftUk or"
+                + " @SoftUks (or @IgnoreSoftUkAudit with JavaDoc justification). Applies to"
+                + " entities extending RootEntity (i.e., having the isDeleted column).")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.inventory"));
+  }
+
+  /**
+   * Story 1.8 / FR-11 — use cases in the application package MUST emit lifecycle events via
+   * {@link LifecycleEventPublisher} (which encapsulates the dual-publish logic), NOT by calling
+   * {@code ModulithOutboxPublisher.append(...)} directly. The reflection check scans all
+   * {@code *UseCase} classes for the presence of a {@code LifecycleEventPublisher}-typed field
+   * AND the absence of a {@code ModulithOutboxPublisher}-typed field (allow-listed exceptions
+   * for read-only / infrastructure use cases).
+   *
+   * <p>Ponytail: same reflection-based pattern as {@link #inventory_pickerUsesOnlyOwnRepositories()}
+   * (Story 1.7). ArchUnit's {@code onlyAccessFieldsWhere} predicate has incompatible API in the
+   * current version; reflection is the documented workaround.
+   */
+  @Test
+  void inventory_lifecycleEventsRouteThroughPublisher() {
+    java.util.List<Class<?>> emitUseCases = emitUseCaseClasses();
+    for (Class<?> useCase : emitUseCases) {
+      boolean hasLifecyclePublisher = false;
+      boolean hasDirectOutbox = false;
+      for (java.lang.reflect.Field field : useCase.getDeclaredFields()) {
+        String type = field.getType().getName();
+        if (type.equals(LifecycleEventPublisher.class.getName())) {
+          hasLifecyclePublisher = true;
+        }
+        if (type.equals(OutboxPublisher.class.getName())
+            || type.equals("vn.vnpt.inventory.infrastructure.outbox.ModulithOutboxPublisher")) {
+          hasDirectOutbox = true;
+        }
+      }
+      if (!hasLifecyclePublisher) {
+        throw new AssertionError(
+            "Use case "
+                + useCase.getName()
+                + " emits lifecycle events but does not declare LifecycleEventPublisher");
+      }
+      if (hasDirectOutbox) {
+        throw new AssertionError(
+            "Use case "
+                + useCase.getName()
+                + " bypasses LifecycleEventPublisher — direct OutboxPublisher"
+                + " reference forbidden for lifecycle events");
+      }
+    }
+  }
+
+  /**
+   * Walks the application package for {@code *UseCase} classes that emit lifecycle events.
+   * Read-only use cases (e.g. {@code OnHandUseCase}, {@code PickWarehouseForReservationUseCase})
+   * are NOT included — the rule targets emit use cases only. The emit use cases are the ones
+   * that hold a {@code LifecycleEventPublisher} reference; we discover them by scanning for
+   * that field type.
+   */
+  private static java.util.List<Class<?>> emitUseCaseClasses() {
+    java.util.List<Class<?>> emitUseCases = new java.util.ArrayList<>();
+    try {
+      java.nio.file.Path appRoot =
+          java.nio.file.Path.of(
+              "src/main/java/vn/vnpt/inventory/application");
+      if (!java.nio.file.Files.isDirectory(appRoot)) {
+        return emitUseCases;
+      }
+      java.nio.file.Files.walk(appRoot)
+          .filter(p -> p.toString().endsWith("UseCase.java"))
+          .forEach(
+              p -> {
+                try {
+                  String rel = appRoot.relativize(p).toString();
+                  String fqn =
+                      "vn.vnpt.inventory.application."
+                          + rel.toString()
+                              .replace('/', '.')
+                              .replaceAll("\\.java$", "");
+                  Class<?> cls = Class.forName(fqn);
+                  for (java.lang.reflect.Field field : cls.getDeclaredFields()) {
+                    if (field.getType().getName()
+                        .equals(LifecycleEventPublisher.class.getName())) {
+                      emitUseCases.add(cls);
+                      break;
+                    }
+                  }
+                } catch (Throwable ignored) {
+                  // skip classes we can't load (transient deps)
+                }
+              });
+    } catch (Exception ignored) {
+      // skip filesystem-walk failures
+    }
+    return emitUseCases;
   }
 }

@@ -9,15 +9,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
-import vn.vnpt.inventory.application.port.OutboxPublisher;
 import vn.vnpt.inventory.application.query.AvailableStockView;
 import vn.vnpt.inventory.domain.InventoryLedgerEntry;
 import vn.vnpt.inventory.domain.InventoryReason;
 import vn.vnpt.inventory.domain.InventoryReservation;
 import vn.vnpt.inventory.domain.ReservationStatus;
-import vn.vnpt.inventory.domain.event.InventoryReserved;
+import vn.vnpt.inventory.domain.event.InventoryLifecycleEvent;
+import vn.vnpt.inventory.domain.event.LifecyclePhase;
 import vn.vnpt.inventory.domain.exception.InsufficientStockException;
 import vn.vnpt.inventory.domain.exception.WarehouseNotFoundException;
+import vn.vnpt.inventory.infrastructure.outbox.LifecycleEventPublisher;
 import vn.vnpt.inventory.infrastructure.repository.InventoryLedgerEntryRepository;
 import vn.vnpt.inventory.infrastructure.repository.InventoryReservationRepository;
 import vn.vnpt.inventory.infrastructure.repository.WarehouseRepository;
@@ -27,7 +28,10 @@ import vn.vnpt.util.events.JcsCanonicalJson;
 
 /**
  * ReserveInventoryUseCase — Story 1.6 / FR-9 (DI-01 root-cause fix), ADR-04, ADR-11, ADR-12,
- * ADR-20. Extended in Story 1.7 / FR-10 with region-based warehouse dispatch.
+ * ADR-20. Extended in Story 1.7 / FR-10 with region-based warehouse dispatch. Migrated in
+ * Story 1.8 / FR-11 to emit the unified {@link InventoryLifecycleEvent} via the
+ * {@link LifecycleEventPublisher} (which dual-publishes {@code inventory.reserved} as a
+ * legacy alias for the Sprint 9 migration window).
  *
  * <p>Atomic per-row reservation with Postgres {@code SELECT … FOR UPDATE}. Steps:
  *
@@ -45,12 +49,8 @@ import vn.vnpt.util.events.JcsCanonicalJson;
  *       {@code available < requested}, throw {@link InsufficientStockException} (409).
  *   <li>Insert {@code inventory_reservation} row (status=ACTIVE, expiresAt=now+ttl).
  *   <li>Append {@code inventory_ledger} row with {@code reason='reserve', delta=-qty}.
- *   <li>Emit outbox row with HMAC signature (producer-side ADR-20).
+ *   <li>Emit outbox row with HMAC signature (ADR-20) via the lifecycle publisher.
  * </ol>
- *
- * <p>The picker dispatch runs BEFORE the idempotency check; on a saga retry with the same
- * {@code saga_step_id} the pre-lock idempotency check returns the existing reservation and the
- * FOR UPDATE is skipped — picker result is discarded. This preserves the ADR-11 guarantee.
  */
 @Service
 @Transactional
@@ -61,7 +61,7 @@ public class ReserveInventoryUseCase {
   private final InventoryReservationRepository reservationRepository;
   private final InventoryLedgerEntryRepository ledgerRepository;
   private final WarehouseRepository warehouseRepository;
-  private final OutboxPublisher outbox;
+  private final LifecycleEventPublisher lifecycleEventPublisher;
   private final ObjectMapper objectMapper;
   private final PickWarehouseForReservationUseCase pickWarehouseUseCase;
 
@@ -74,19 +74,11 @@ public class ReserveInventoryUseCase {
   /**
    * Reserve {@code quantity} units for a saga step. Idempotent on {@code sagaStepId}: same
    * {@code saga_step_id} returns the existing reservation with no side-effects.
-   *
-   * @throws IllegalArgumentException for invalid input (quantity, sagaStepId, ttl, dispatch XOR)
-   * @throws WarehouseNotFoundException if {@code warehouseId} does not exist
-   * @throws InsufficientStockException if available stock {@code < requested}
    */
   public InventoryReservation reserve(ReserveInventoryCommand cmd) {
     validate(cmd);
     validateWarehouseDispatch(cmd);
 
-    // FR-10 dispatch: when caller supplies only shippingRegion, pick the best in-region
-    // (or cross-region fallback) warehouse with enough stock. The picker result is cached
-    // so the rest of the use case is byte-identical to Story 1.6 (uses `resolvedWarehouseId`
-    // everywhere — not `cmd.warehouseId()` directly).
     Long pickerPick =
         cmd.warehouseId() == null
             ? pickWarehouseUseCase
@@ -102,27 +94,18 @@ public class ReserveInventoryUseCase {
         .findById(resolvedWarehouseId)
         .orElseThrow(() -> new WarehouseNotFoundException(resolvedWarehouseId));
 
-    // ADR-11 idempotency: same saga_step_id returns the same reservation.
     var existing = reservationRepository.findBySagaStepId(cmd.sagaStepId());
     if (existing.isPresent()) {
       return existing.get();
     }
 
-    // FR-9 lock: serialize concurrent reserves for the same (variant, warehouse).
     ledgerRepository.lockLedgerByVariantAndWarehouse(cmd.variantId(), resolvedWarehouseId);
 
-    // ADR-11 idempotency re-check inside the lock: a concurrent request with the same
-    // saga_step_id may have committed between our pre-lock check and lock acquisition.
-    // Without this re-check, the second request would see insufficient stock (because the
-    // first reserved the qty) and throw InsufficientStockException — breaking ADR-11's
-    // "saga retries with same step get the same result" guarantee.
     var existingAfterLock = reservationRepository.findBySagaStepId(cmd.sagaStepId());
     if (existingAfterLock.isPresent()) {
       return existingAfterLock.get();
     }
 
-    // After lock: compute available. Both reads see committed state of any concurrent
-    // transaction (the FOR UPDATE serializes them).
     long available =
         ledgerRepository
             .findAvailable(cmd.variantId(), resolvedWarehouseId)
@@ -136,6 +119,9 @@ public class ReserveInventoryUseCase {
 
     Duration ttl = cmd.ttl() != null ? cmd.ttl() : Duration.ofMinutes(defaultTtlMinutes);
     Instant expiresAt = Instant.now().plus(ttl);
+    // ponytail: expiresAt is captured on the reservation row only — the unified lifecycle
+    // event does not carry it (per AC #5 shape). Consumers wanting TTL can join the
+    // reservation table by reservationUuid.
 
     InventoryReservation reservation =
         reservationRepository.save(
@@ -161,27 +147,44 @@ public class ReserveInventoryUseCase {
             .tenantId("default")
             .build());
 
-    InventoryReserved payload =
-        new InventoryReserved(
-            reservation.getUuid(),
-            cmd.variantId(),
-            resolvedWarehouseId,
-            cmd.quantity(),
-            cmd.sagaStepId(),
-            cmd.orderUuid(),
-            ledgerEventId,
-            expiresAt,
-            Instant.now());
+    InventoryLifecycleEvent payload =
+        InventoryLifecycleEvent.builder()
+            .eventId(ledgerEventId)
+            .aggregateType("InventoryReservation")
+            .aggregateId(reservation.getUuid())
+            .occurredAt(Instant.now())
+            .phase(LifecyclePhase.RESERVED)
+            .reservationUuid(reservation.getUuid())
+            .variantId(cmd.variantId())
+            .warehouseId(resolvedWarehouseId)
+            .quantity(cmd.quantity())
+            .reason(InventoryReason.RESERVE.wireValue())
+            .sagaStepId(cmd.sagaStepId())
+            .orderUuid(cmd.orderUuid())
+            .tenantId("default")
+            .build();
 
-    Map<String, String> signatures =
-        Map.of("hmac_sha256", HmacEventSigner.sign(canonicalize(payload), inventoryServiceSecret));
+    String signature = HmacEventSigner.sign(canonicalize(payload), inventoryServiceSecret);
 
-    outbox.append(
-        "InventoryReservation",
-        reservation.getUuid(),
-        "inventory.reserved",
-        payload,
-        signatures);
+    InventoryLifecycleEvent signed =
+        InventoryLifecycleEvent.builder()
+            .eventId(payload.getEventId())
+            .aggregateType(payload.getAggregateType())
+            .aggregateId(payload.getAggregateId())
+            .occurredAt(payload.getOccurredAt())
+            .phase(payload.getPhase())
+            .reservationUuid(payload.getReservationUuid())
+            .variantId(payload.getVariantId())
+            .warehouseId(payload.getWarehouseId())
+            .quantity(payload.getQuantity())
+            .reason(payload.getReason())
+            .sagaStepId(payload.getSagaStepId())
+            .orderUuid(payload.getOrderUuid())
+            .tenantId(payload.getTenantId())
+            .signatures(Map.of("hmac_sha256", signature))
+            .build();
+
+    lifecycleEventPublisher.publish(signed);
 
     log.debug(
         "Reserved: variantId={} warehouseId={} qty={} sagaStepId={} reservationUuid={}",
@@ -194,11 +197,6 @@ public class ReserveInventoryUseCase {
     return reservation;
   }
 
-  /**
-   * Convert a record payload to a {@code Map<String, Object>}, then JCS-canonicalize. Same
-   * parse-then-canonicalize pattern as the catalog producer — both producer and consumer apply
-   * the same chain so the HMAC envelope is independent of Jackson whitespace quirks.
-   */
   private String canonicalize(Object payload) {
     Map<String, Object> map = objectMapper.convertValue(payload, Map.class);
     return JcsCanonicalJson.serialize(map);
@@ -216,11 +214,6 @@ public class ReserveInventoryUseCase {
     }
   }
 
-  /**
-   * FR-10 dispatch XOR — exactly one of {@code warehouseId} / {@code shippingRegion} must be
-   * non-null. The picker is called only when {@code shippingRegion} is supplied; v1 saga
-   * callers continue to supply {@code warehouseId}.
-   */
   private static void validateWarehouseDispatch(ReserveInventoryCommand cmd) {
     boolean hasWarehouseId = cmd.warehouseId() != null;
     boolean hasRegion = cmd.shippingRegion() != null;
