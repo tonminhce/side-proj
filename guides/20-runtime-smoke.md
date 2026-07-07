@@ -4,10 +4,10 @@
 
 ## TL;DR
 
-After starting 4 services (catalog, inventory, cart, payment), the smoke test is:
+After starting 5 services (catalog, inventory, cart, checkout, payment), the smoke test is:
 
 ```bash
-for port in 8091 8093 8095 8096; do
+for port in 8091 8093 8095 8094 8096; do
   curl -sS -m 5 http://localhost:$port/actuator/health | jq -c .
 done
 ```

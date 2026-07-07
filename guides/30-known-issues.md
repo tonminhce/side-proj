@@ -7,8 +7,8 @@
 | # | Issue | Status | Story | Severity |
 |---|-------|--------|-------|----------|
 | 1 | Util double-registration: `FileProperties`/`FolderProperties`/`TelegramProperties` had both `@Configuration` and `@ConfigurationProperties` | Fixed in commit `c58ddd2` | F1–F17 review | high |
-| 2 | Checkout saga 2.5 entity scanning fails (`Not a managed type: InventoryReservation`) | **Open — see below** | 2.5 | high |
-| 3 | DevSecurityConfig bean-order race (multiple SecurityFilterChain compete) | **Open** | this session | medium |
+| 2 | Checkout saga 2.5 entity scanning fails (`Not a managed type: InventoryReservation`) | **Fixed in commit `84ca0f1`** | 2.5 | high |
+| 3 | DevSecurityConfig bean-order race (multiple SecurityFilterChain compete) | **Fixed in commit `84ca0f1`** | this session | medium |
 | 4 | `CatalogEventListener` references `JavaDirectInventoryReservationAdapter` — checkout-only issue | **See #2** | 2.5 | high |
 | 5 | Modulith `EventPublicationRegistry` bean not auto-wired | Documented; `EventsAutoConfiguration` exists but bean-order in catalog may be wrong | 2.5 follow-up | medium |
 | 6 | Runtime smoke had bean-name conflict (`globalExceptionHandler` in both util + catalog) | Fixed in commit `d7b8066` (`UtilGlobalExceptionHandler` rename) | F1–F17 | high |
