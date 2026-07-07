@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # story-automator-review — Story 3.1 status → done
+last_updated: 2026-07-07  # dev-story — Story 3.2 status → review; smoke + 55 Surefire + 3 Failsafe green
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   epic-2-retrospective: optional
   epic-3: in-progress  # Epic 3: Pay Securely  # create-story — Story 3.1 status → ready-for-dev
   3-1-paymentservice-stable-idempotency-key-fr-25-solves-di-02-root-cause: done  # story-automator-review 2026-07-07 — 6 findings (1 HIGH dead-code PaymentModulithConfig deleted, 3 MEDIUM fixed: openssl cross-platform smoke, port validation moved to AuthorizePaymentCommand boundary, git-vs-story file-list discrepancy documented, 2 LOW fixed); 36/36 tests green post-fix; runtime smoke exits 0
-  3-2-stripe-webhook-dedup-fr-26-solves-r-03: backlog
+  3-2-stripe-webhook-dedup-fr-26-solves-r-03: done  # story-automator-review 2026-07-07 — 0 CRITICAL; 2 MEDIUM auto-fixed (smoke Flyway regex tightened, File List completeness); 3 LOW documented (Lombok @Setter codebase convention, no-PK WebhookDeliveryLog shim acceptable, mixed Jackson imports redundant annotations); 11/11 ACs validated; ArchUnit 3 rules pass; runtime smoke end-to-end passes
   3-3-stripe-elements-iframe-integration-fr-24-fr-29-fr-79-solves-r-15: backlog
   3-4-gateway-rate-limiter-with-bin-velocity-check-fr-81-solves-r-05: backlog
   3-5-3ds-step-up-event-signing-fr-27-fr-82-solves-at-03-root-cause: backlog

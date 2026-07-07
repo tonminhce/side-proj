@@ -7,13 +7,15 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
 
 /**
- * ArchUnit package-boundary guard for PaymentService — Story 3.1 / AC #7, #9. The {@code PaymentPort}
- * interface is the seam; the use case MUST NOT know the Stripe SDK exists.
+ * ArchUnit package-boundary guards for PaymentService — Story 3.1 / AC #7, #9 and Story 3.2 / AC #11.
+ * The {@code PaymentPort} interface is the seam; the use case MUST NOT know the Stripe SDK or the
+ * JPA entities / repositories exist.
  *
- * <p>Only the {@code application.usecase.. → infrastructure.stripe..} direction is forbidden;
- * the {@code infrastructure → application.port..} direction is the legal port-seam dependency that
- * makes the adapter implement the interface. The broad "infrastructure → application" rule would
- * flag every port implementation as a violation and is NOT what AC #7 describes.
+ * <p>Only the {@code application.usecase.. → infrastructure.{stripe,entity,repository}..} directions
+ * are forbidden; the {@code infrastructure → application.port..} direction is the legal port-seam
+ * dependency that makes the adapter implement the interface. A blanket "infrastructure →
+ * application" rule would flag every port implementation as a violation and is NOT what these ACs
+ * describe.
  */
 class PaymentPortContractTest {
 
@@ -28,6 +30,40 @@ class PaymentPortContractTest {
         .because(
             "The use case talks to the port interface, not the Stripe SDK adapter —"
                 + " the port seam is the whole point of FR-25 testability.")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.payment"));
+  }
+
+  @Test
+  void application_usecase_mayNotImportJpaEntities() {
+    noClasses()
+        .that()
+        .resideInAPackage("vn.vnpt.payment.application.usecase..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("vn.vnpt.payment.infrastructure.entity..")
+        .because(
+            "The use case depends on the WebhookDedupPort interface (FR-26 / ADR-21), not the"
+                + " JPA entity — keeps the dedup contract mockable without a Hibernate Session.")
+        .check(
+            new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("vn.vnpt.payment"));
+  }
+
+  @Test
+  void application_usecase_mayNotImportJpaRepositories() {
+    noClasses()
+        .that()
+        .resideInAPackage("vn.vnpt.payment.application.usecase..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("vn.vnpt.payment.infrastructure.repository..")
+        .because(
+            "The use case depends on the WebhookDedupPort interface (FR-26 / ADR-21), not the"
+                + " Spring Data repository — the broader rule that catalog already enforces.")
         .check(
             new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
