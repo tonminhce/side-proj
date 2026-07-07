@@ -3,6 +3,7 @@ package vn.vnpt.checkout;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.modulith.ApplicationModule;
 
 /**
@@ -29,7 +30,8 @@ import org.springframework.modulith.ApplicationModule;
  * through the autoconfig SPI.
  */
 @SpringBootApplication
-@ComponentScan(basePackages = "vn.vnpt.checkout")
+@ComponentScan(basePackages = {"vn.vnpt.checkout", "vn.vnpt.inventory.application"})
+@EnableJpaRepositories(basePackages = {"vn.vnpt.checkout", "vn.vnpt.inventory"})
 @ApplicationModule(displayName = "checkout")
 public class CheckoutApplication {
 

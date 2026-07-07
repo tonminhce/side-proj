@@ -35,6 +35,13 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Story 2.5 — checkout depends on inventory module; let Hibernate's archive scanner
+        # auto-discover @Entity types in both modules' jars.
+        archive:
+          scanner:
+            detect:
+              - class
+              - package
     # architecture.md anti-pattern guard: never auto-open a transaction in the view layer.
     open-in-view: false
 
