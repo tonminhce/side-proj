@@ -157,6 +157,54 @@ ready; the listener is the cheap 30-line addition once the producer is real.
 **Real blocker:** producer-side `payment.captured` / `payment.refunded` events — separate deferred item,
 not in this session's scope.
 
+### Producer-side shipped (commit pending — cycle 4)
+
+Producer-side `PaymentCapturedEvent` + `PaymentRefundedEvent` now published by
+`HandleStripeWebhookUseCase` via `PaymentOutboxPublisher`. The order-side consumer
+(`PaymentCapturedOrderAdvancer` from Story 4.2) is now actually wired end-to-end.
+
+**Status of this entry:** the original blocker (missing producer) is resolved. The remaining
+gap — wiring the `PaymentEventSignatureVerifier` into a checkout listener — is now cheap
+(~30 lines). Move to a new HIGH-priority entry below.
+
+---
+
+## [Story 3.5 follow-up #3] 2026-07-08 — Wire PaymentEventSignatureVerifier into checkout listener
+
+**Blocker:** Now that the producer ships `payment.captured` events (cycle 4), the consumer-side
+HMAC verifier (`PaymentEventSignatureVerifier` + 4 tests already exist) needs a listener wired
+into checkout's `@ApplicationModuleListener` path to verify the envelope before forwarding to
+the saga. Today signed events are accepted by checkout without signature check.
+**Severity:** HIGH (FR-82 / AT-03 contract requires both producer AND consumer-side signing)
+**Surface:** `services/checkout/.../infrastructure/outbox/PaymentCapturedCheckoutAdvancer.java`
+(file name TBD)
+**Proposed fix:** Add a `@ApplicationModuleListener` method on a new
+`PaymentCapturedCheckoutAdvancer` class. It receives the in-process event + reads the
+envelope (`event_id`, `event_type`, `aggregate_type`, `aggregate_id`, `payload`) from the
+Modulith publication record's metadata, rebuilds the canonical JSON via
+`JcsCanonicalJson.serialize(...)`, calls `PaymentEventSignatureVerifier.verify(...)`, and
+either advances the checkout saga or increments the
+`security.event.signature.mismatch` counter.
+**Status:** unblocked — producer is real, verifier is tested. Listener is the cheap piece
+remaining (~30 lines + 3 unit tests).
+
+---
+
+## [Story 3.5 follow-up #4] 2026-07-08 — PaymentRefundedOrderAdvancer in order service
+
+**Blocker:** `payment.refunded` events are now published to the outbox (cycle 4) but the order
+service has no consumer for them. The event carries `paymentIntentId` + `amountCents` +
+`currency` (no `orderUuid` — charge payload doesn't propagate metadata).
+**Severity:** MEDIUM (FR-32 contract partially satisfied — order knows about captures but not
+refunds; reconciliation needs to learn about refunds to update ledger / emit refund vouchers)
+**Surface:** `services/order/.../application/saga/PaymentRefundedOrderAdvancer.java`
+(file name TBD)
+**Proposed fix:** Mirror `PaymentCapturedOrderAdvancer` with a `PaymentRefundedEvent` consumer
+that looks up the order by `paymentIntentId` (new repository method
+`OrderRepository.findByPaymentIntentId`) and appends a `REFUNDED` transition via the existing
+`AppendOrderTransitionUseCase`. ~40 lines + 2 tests.
+**Status:** open — `payment.refunded` event is published; the consumer side is the missing piece.
+
 ---
 
 ## [Story 3.5] 2026-07-08 — 3DS risk-decision logic in `RealStripePaymentAdapter`

@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
+import vn.vnpt.payment.application.port.PaymentOutboxPublisher;
 import vn.vnpt.payment.infrastructure.security.HmacServiceKeyProvider;
 import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
@@ -18,12 +19,16 @@ import vn.vnpt.util.events.ModulithOutboxPublisher;
  * {@code EventPublicationRepository} + {@code EventSerializer} beans are available (Spring's
  * nested-class component-scan doesn't pick them up when the outer is abstract).
  *
+ * <p>Implements {@link PaymentOutboxPublisher} so the use-case layer can mock the seam in
+ * unit tests (Mockito's mock-maker-subclass can't mock final classes).
+ *
  * <p>Story 3.5 override: HMAC-sign every envelope before insert via
  * {@link HmacEventSigner#sign} + {@link JcsCanonicalJson#serialize} (ADR-20 / AT-03 mitigation).
  */
 @Component
 @Import(ModulithOutboxPublisher.ModulithBridgeSupport.class)
-public class PaymentModulithOutboxPublisher extends ModulithOutboxPublisher {
+public class PaymentModulithOutboxPublisher extends ModulithOutboxPublisher
+    implements PaymentOutboxPublisher {
 
   private final HmacServiceKeyProvider hmacKeyProvider;
 
