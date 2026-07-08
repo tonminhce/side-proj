@@ -134,7 +134,17 @@ Format per entry:
 **Severity:** HIGH (FR-27 contract)
 **Surface:** `services/payment/.../infrastructure/stripe/RealStripePaymentAdapter.java:46-58` (the `authorize(...)` method)
 **Proposed fix:** Add `country` (String, 2-letter ISO-3166-1 alpha-2 nullable) + `riskLevel` (enum) to `AuthorizePaymentCommand`; add the 3DS decision branch in `authorize(...)`; surface `intent.getNextAction().getRedirectToUrl().getUrl()` (verify the 28.x path) as a new `PaymentResult.requiresActionUrl` field.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-08)
+
+### Resolution (Story 3.5 follow-up cycle)
+
+- `RiskLevel` enum + `ThreeDSecureDecision` pure function (21 unit tests covering the truth table).
+- `AuthorizePaymentCommand` extended with nullable `country` + `riskLevel`; backward-compat 5-arg ctor preserved; `withCountry`/`withRiskLevel` helpers.
+- `PaymentResult` extended with nullable `requiresActionUrl`.
+- `RealStripePaymentAdapter.authorize(...)` evaluates the decision; on true sets `payment_method_options.card.request_three_d_secure=ANY` and surfaces `nextAction.redirectToUrl.url`.
+- Test-double `StripePaymentAdapter` mirrors the decision (returns REQUIRES_ACTION + stub URL).
+- Tests: 91/91 green (was 68; +23).
+- Smoke: `dev/scripts/smoke-payment-3-5-follow-up.sh` — service boots clean, RealStripePaymentAdapter initializes, no NoClassDefFoundError on new types.
 
 ---
 

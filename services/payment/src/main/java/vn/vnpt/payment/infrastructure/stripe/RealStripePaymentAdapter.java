@@ -14,12 +14,11 @@ import vn.vnpt.payment.application.port.AuthorizePaymentCommand;
 import vn.vnpt.payment.application.port.PaymentPort;
 import vn.vnpt.payment.application.port.PaymentPortUnavailableException;
 import vn.vnpt.payment.application.port.PaymentResult;
+import vn.vnpt.payment.application.port.ThreeDSecureDecision;
 
 /**
  * Real {@link PaymentPort} backed by {@code com.stripe:stripe-java} SDK — Story 3.3 / FR-24, FR-29,
- * ADR-23, R-12, R-15. Active in non-test profiles (dev, prod). The test profile keeps the recording
- * test-double (Story 3.1's {@link StripePaymentAdapter}) so unit tests assert the idempotency-key
- * contract.
+ * ADR-23, R-12, R-15; Story 3.5 follow-up / FR-27 (3DS decision).
  *
  * <p>The adapter forwards {@code cmd.idempotencyKey()} unchanged as Stripe's
  * {@code Idempotency-Key} HTTP header — the use case owns the key (ADR-11).
@@ -27,6 +26,13 @@ import vn.vnpt.payment.application.port.PaymentResult;
  * <p>API version is pinned per-request via {@link RequestOptions#unsafeSetStripeVersionOverride}
  * (stripe-java 28.x removed the {@code Stripe.apiVersion} static setter; only the SDK constant
  * {@link Stripe#API_VERSION} and per-request override remain).
+ *
+ * <p>3DS step-up (Story 3.5 follow-up / FR-27): when
+ * {@link ThreeDSecureDecision#shouldRequire} returns {@code true}, the adapter sets
+ * {@code payment_method_options.card.request_three_d_secure=ANY} on the PaymentIntent. Stripe
+ * then either authenticates silently via the SCA engine or returns
+ * {@code nextAction.redirectToUrl.url} which the adapter surfaces in
+ * {@link PaymentResult#requiresActionUrl()}.
  */
 @Service
 @Profile("!test")
@@ -59,12 +65,25 @@ public class RealStripePaymentAdapter implements PaymentPort {
 
   @Override
   public PaymentResult authorize(AuthorizePaymentCommand cmd) {
-    PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+    PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
         .setAmount(cmd.amountCents())
         .setCurrency(cmd.currency().toLowerCase())
         .setCustomer(cmd.stripeCustomerId())
-        .setConfirm(true)
-        .build();
+        .setConfirm(true);
+
+    boolean require3ds = ThreeDSecureDecision.shouldRequire(cmd.country(), cmd.amountCents(), cmd.riskLevel());
+    if (require3ds) {
+      paramsBuilder.setPaymentMethodOptions(
+          PaymentIntentCreateParams.PaymentMethodOptions.builder()
+              .setCard(
+                  PaymentIntentCreateParams.PaymentMethodOptions.Card.builder()
+                      .setRequestThreeDSecure(
+                          PaymentIntentCreateParams.PaymentMethodOptions.Card.RequestThreeDSecure.ANY)
+                      .build())
+              .build());
+      log.info("3DS step-up requested: order={} country={} amountCents={} riskLevel={}",
+          cmd.orderUuid(), cmd.country(), cmd.amountCents(), cmd.riskLevel());
+    }
 
     // stripe-java 28.x: pin API version per-request via the unsafe static helper on the inner
     // RequestOptionsBuilder class (the only path; no public setter exists for stripeVersionOverride).
@@ -73,7 +92,7 @@ public class RealStripePaymentAdapter implements PaymentPort {
         apiVersion).build();
 
     try {
-      PaymentIntent intent = PaymentIntent.create(params, pinned);
+      PaymentIntent intent = PaymentIntent.create(paramsBuilder.build(), pinned);
       return mapResult(intent);
     } catch (StripeException e) {
       int status = e.getStatusCode() != null ? e.getStatusCode() : 0;
@@ -90,13 +109,17 @@ public class RealStripePaymentAdapter implements PaymentPort {
 
   private PaymentResult mapResult(PaymentIntent intent) {
     String status = intent.getStatus();
+    long piId = Long.parseLong(intent.getId().replaceAll("\\D", ""));
     return switch (status) {
-      case "succeeded" -> new PaymentResult(
-          Long.parseLong(intent.getId().replaceAll("\\D", "")), PaymentResult.Status.SUCCEEDED);
-      case "requires_action" -> new PaymentResult(
-          Long.parseLong(intent.getId().replaceAll("\\D", "")), PaymentResult.Status.REQUIRES_ACTION);
-      default -> new PaymentResult(
-          Long.parseLong(intent.getId().replaceAll("\\D", "")), PaymentResult.Status.REQUIRES_CONFIRMATION);
+      case "succeeded" -> new PaymentResult(piId, PaymentResult.Status.SUCCEEDED);
+      case "requires_action" -> {
+        String url = intent.getNextAction() != null
+            && intent.getNextAction().getRedirectToUrl() != null
+                ? intent.getNextAction().getRedirectToUrl().getUrl()
+                : null;
+        yield new PaymentResult(piId, PaymentResult.Status.REQUIRES_ACTION, url);
+      }
+      default -> new PaymentResult(piId, PaymentResult.Status.REQUIRES_CONFIRMATION);
     };
   }
 }
