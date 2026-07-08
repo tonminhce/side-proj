@@ -194,4 +194,21 @@ Format per entry:
 **Severity:** MEDIUM (no runtime smoke; the unit tests cover the contract)
 **Surface:** `services/pricing/src/main/java/vn/vnpt/pricing/PricingApplication.java` + `application.yml`
 **Proposed fix:** Add an explicit `@SpringBootApplication` `exclude` array (with the actual class references) OR add `spring-data-jpa` exclusions to a `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` override file. Alternative: drop the `spring-boot-starter-data-jpa` dep from util (cascade impact unknown; affects all services). The proper fix is Spring Boot 4's documented `@SpringBootApplication(exclude = ...)` with class references — need to add the JPA/DataSource classes to the classpath of pricing's compile-scope (currently only on util's classpath, which is why the `exclude` array can't reference them).
-**Status:** open
+**Status:** fixed-in-commit-4293485 (2026-07-08)
+
+### Resolution (commit 4293485)
+
+The actual root cause was Spring Boot 4's autoconfig package rename
+(`org.springframework.boot.autoconfigure.{module}.*` →
+`org.springframework.boot.{module}.autoconfigure.*`). The old names
+silently no-op'd in `spring.autoconfigure.exclude`, so JPA + DataSource +
+DataSourceHealthContributor autoconfigs were still firing. Fix:
+- `services/pricing/src/main/resources/application.properties` — rewrite
+  exclude list to SB4 package paths; yml was being shadowed by properties.
+- `services/pricing/src/main/resources/application.yml` — same rewrite +
+  `management.health.redis.enabled: false` (no Redis container in dev).
+- `util/pom.xml` — `spring-boot-starter-data-jpa` marked `<optional>true</optional>`
+  (already done in prior session). All 8 JPA services re-compile clean.
+
+Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
+`/actuator/loggers` 404, variant-1 returns 200 + VND, variant-unknown 404).
