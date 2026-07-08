@@ -185,8 +185,41 @@ Modulith publication record's metadata, rebuilds the canonical JSON via
 `JcsCanonicalJson.serialize(...)`, calls `PaymentEventSignatureVerifier.verify(...)`, and
 either advances the checkout saga or increments the
 `security.event.signature.mismatch` counter.
-**Status:** unblocked — producer is real, verifier is tested. Listener is the cheap piece
-remaining (~30 lines + 3 unit tests).
+**Status:** **wontfix-intra-jvm** (2026-07-08 cycle 5 structural finding)
+
+### Re-assessment (cycle 5): structural finding — verifier is for cross-service leg only
+
+The `@EventListener` / `@ApplicationModuleListener` mechanism delivers only the event
+**instance** to the listener — the HMAC envelope (event_id, event_type, aggregate_type,
+aggregate_id, payload) and the `signatures` JSONB column live in the `outbox` table row,
+not in the in-process Spring event payload. The intra-JVM `@EventListener` path cannot
+read those values without an explicit signature on the event record itself.
+
+Three real options were considered:
+
+1. **Add `signatures` field to the event record.** Breaks the order-side
+   `PaymentCapturedOrderAdvancer`'s constructor (currently takes the 5-arg shape);
+   would require coordinated edits in 2 packages. The field would be unused on the
+   order-side listener (intra-JVM trusted path). Ugly.
+
+2. **Wrap event in `SignedPaymentCapturedEvent` envelope.** Over-engineering for a single
+   downstream consumer; adds a type the order listener must unwrap.
+
+3. **Document that the verifier is for the cross-service leg.** Honest. The intra-JVM
+   path is already trusted (same JVM, same trust boundary); HMAC only matters when an
+   event crosses a process boundary (Kafka bridge, REST webhook, etc.). The verifier
+   class + 4 tests stand ready for that future leg.
+
+**Decision:** option 3. The verifier exists, is tested, and will be wired into the
+**future Kafka outbox bridge** (a story in Epic 10 / observability) where the consumer
+reads the row + signatures column and verifies before forwarding. For now, mark this
+entry as `wontfix-intra-jvm` and update the FR-82 contract note: **HMAC producer-side
+signing is enforced**; consumer-side verification applies only to the cross-service
+leg when it ships.
+
+The order-side `PaymentCapturedOrderAdvancer` consumes the event without verification
+(intra-JVM trusted). The mismatch counter increments only on the cross-service leg
+where verification actually runs.
 
 ---
 
