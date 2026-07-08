@@ -94,7 +94,21 @@ Format per entry:
 **Severity:** HIGH (AC #7 violation; smoke is the only thing that proves the filter works)
 **Surface:** `services/gateway/src/test/java/vn/vnpt/gateway/filter/` (does not exist)
 **Proposed fix:** Write the 5 filter tests with `@SpringBootTest(classes = TestConfig.class)` mirroring the Lua-test pattern (minimal config, bypass full GatewayApplication), assert Redis keys + response status + headers via a real `WebTestClient`.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-08)
+
+### Resolution (Story 3.4 follow-up cycle 3)
+
+Existing test `RateLimiterGatewayFilterFactoryTest` already covered 4 cases from the deferred entry:
+- `rejectsRequestWithoutTrustedRealIp` (covers AC #7 NFR-SEC-1 partial: missing-IP reject)
+- `forwardsAllowedRequestAndAddsRateLimitHeaders` (covers `apply_allowsRequestWhenTokenBucketHasTokens` + `apply_emitsRateLimitHeaders`)
+- `blocksWhenBinVelocityThresholdExceeded` (covers `apply_blocksBinVelocityWhenLimitExceeded`)
+- `failsClosedWhenRedisErrors` (bonus fail-closed coverage)
+
+Added 2 missing cases to fully close HIGH-2:
+- `blocksWhenTokenBucketExhausted` — mocks Lua return [allowed=0, remaining=0, retryAfter=37]; asserts 429 + Retry-After=37 + RateLimit-Remaining=0 + body contains "rate_limited"
+- `usesXRealIpNotXForwardedFor` — asserts that a request with ONLY X-Forwarded-For (no X-Real-IP) is rejected as missing — proves NFR-SEC-1 (X-Forwarded-For is client-spoofable)
+
+Total: 6 tests, all green. AC #7 / HIGH-2 fully resolved.
 
 ---
 
