@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Story 3.3 / FR-29 / R-15 / ADR-23.
+
+  Wires the shared PanRedactingAppender as the root console appender so every log event in this
+  service has PAN-shaped fields (\d{13,19}) replaced with ***REDACTED:PAN*** before the encoder
+  writes it. The original Spring Boot CONSOLE appender is overridden.
+
+  The shared <appender> is defined in util/src/main/resources/logback-include.xml and reused
+  across services.
+-->
+<configuration>
+    <include resource="logback-include.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="REDACTING_CONSOLE"/>
+    </root>
+</configuration>

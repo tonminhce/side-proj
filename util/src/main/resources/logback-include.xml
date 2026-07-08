@@ -1,0 +1,19 @@
+<!--
+  logback-include.xml — Story 3.3 / FR-29 / R-15 / ADR-23.
+
+  Defines a shared console appender that wraps the standard ConsoleAppender in
+  PanRedactingAppender so every log event has PAN-shaped fields (\d{13,19}) replaced with
+  ***REDACTED:PAN*** before the encoder writes it.
+
+  Wire via <include resource="logback-include.xml"/> in each service's logback-spring.xml, then
+  reference the redacting-console appender.
+-->
+<included>
+    <appender name="REDACTING_CONSOLE" class="vn.vnpt.util.logging.PanRedactingAppender">
+        <delegate class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            </encoder>
+        </delegate>
+    </appender>
+</included>

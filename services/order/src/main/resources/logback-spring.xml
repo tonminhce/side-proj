@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Story 4.1 (re-uses Story 3.3's PanRedactingAppender infra).
+  Wires the shared logback-include.xml so PAN-shaped fields (\d{13,19}) are redacted at runtime.
+-->
+<configuration>
+    <include resource="logback-include.xml"/>
+    <root level="INFO">
+        <appender-ref ref="REDACTING_CONSOLE"/>
+    </root>
+</configuration>

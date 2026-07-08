@@ -18,20 +18,22 @@
 
     <modules>
         <module>util</module>
-        <!-- Services (14) -->
+        <!-- Services (14 + Story 3.4 gateway) -->
         <module>services/catalog</module>
         <module>services/inventory</module>
         <module>services/cart</module>
         <module>services/checkout</module>
         <module>services/payment</module>
+        <module>services/gateway</module>
         <module>services/order</module>
         <module>services/fulfillment</module>
         <module>services/returns</module>
         <module>services/customer</module>
+        <module>services/auth</module>
+        <module>services/pricing</module>
         <module>services/search</module>
         <module>services/notification</module>
         <module>services/admin</module>
-        <module>services/pricing</module>
         <module>services/invoice</module>
         <!-- BFFs (2) -->
         <module>bff/storefront-bff</module>

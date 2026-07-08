@@ -1,0 +1,67 @@
+server:
+  port: 8089   # AuthService: 8089. catalog 8081, admin-bff 8082, inventory 8083, checkout 8084, cart 8085, payment 8086, order 8087, customer 8088, gateway 8080.
+
+spring:
+  application:
+    name: auth
+
+  main:
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_AUTH_DB:auth_db}
+    username: ${POSTGRES_AUTH_USER:auth_user}
+    password: ${POSTGRES_AUTH_PASSWORD:auth_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/auth
+    baseline-on-migrate: true
+    table: flyway_schema_history
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    vn.vnpt.auth: INFO
+
+folder:
+  folderTemp: /tmp/auth/tmp
+file:
+  end-point: http://localhost:9000
+  access-key: minio
+  secret-key: minio123
+  bucket-name: auth-files
+telegram:
+  error-bot-token: dev-placeholder
+  error-group-chat-id: "0"
+  is-send-error: false
+
+tenants:
+  datasources:
+    default:
+      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_AUTH_DB:auth_db}
+      driverClassName: org.postgresql.Driver
+      username: ${POSTGRES_AUTH_USER:auth_user}
+      password: ${POSTGRES_AUTH_PASSWORD:auth_pass}

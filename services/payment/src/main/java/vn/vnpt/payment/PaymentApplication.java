@@ -2,7 +2,9 @@ package vn.vnpt.payment;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.modulith.ApplicationModule;
+import vn.vnpt.payment.infrastructure.stripe.StripeProperties;
 
 /**
  * PaymentService — Story 3.1 (FR-25, ADR-11, ADR-21). v1 ships the stable idempotency-key contract
@@ -27,6 +29,7 @@ import org.springframework.modulith.ApplicationModule;
  */
 @SpringBootApplication
 @ApplicationModule(displayName = "payment")
+@EnableConfigurationProperties(StripeProperties.class)
 public class PaymentApplication {
 
   public static void main(String[] args) {

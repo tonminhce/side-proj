@@ -1,0 +1,91 @@
+# services/order/src/main/resources/application.yml — Story 4.1
+# Per-service datasource. Defaults match dev/postgres-init entries; prod secrets come from Vault
+# (ADR-21). No real secrets in this file.
+
+server:
+  port: 8087   # OrderService: 8087. catalog 8081, admin-bff 8082, inventory 8083, checkout 8084, cart 8085, payment 8086, gateway 8080.
+
+spring:
+  application:
+    name: order
+
+  main:
+    allow-bean-definition-overriding: true
+
+  autoconfigure:
+    # Mirror services/payment's exclude pattern: util's UtilsAutoConfiguration has the pre-existing
+    # @Component-vs-@ConfigurationProperties dual-bean bug; exclude it in dev/test. The Modulith
+    # outbox bridge's JDBC EventPublicationRepository is excluded too — our OrderModulithOutboxPublisher
+    # writes the canonical `outbox` table directly.
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_ORDER_DB:order_db}
+    username: ${POSTGRES_ORDER_USER:order_user}
+    password: ${POSTGRES_ORDER_PASSWORD:order_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    # Order migrations live under db/migration/order/ (sub-folder pattern, mirrors services/payment).
+    locations: classpath:db/migration/order
+    baseline-on-migrate: true
+    table: flyway_schema_history
+
+  modulith:
+    events:
+      jdbc:
+        poll-interval: 500ms
+      outbox:
+        publish-backpressure-threshold: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # FR-29 / R-15 deny-list; loggers stays off
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    vn.vnpt.order: INFO
+    org.springframework.modulith: INFO
+
+# util's pre-existing @Component / @ConfigurationProperties dual-bean workarounds (Story 0.5).
+folder:
+  folderTemp: /tmp/order/tmp
+  folderTemplate: /tmp/order/templates
+  temp:
+    timeToLive: 60000
+file:
+  end-point: http://localhost:9000
+  access-key: minio
+  secret-key: minio123
+  bucket-name: order-files
+  public-bucket-name: order-files-public
+  dvc-bucket-name: order-files-dvc
+  sub-directory: order
+telegram:
+  error-bot-token: dev-placeholder
+  error-group-chat-id: "0"
+  is-send-error: false
+
+tenants:
+  datasources:
+    default:
+      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_ORDER_DB:order_db}
+      driverClassName: org.postgresql.Driver
+      username: ${POSTGRES_ORDER_USER:order_user}
+      password: ${POSTGRES_ORDER_PASSWORD:order_pass}

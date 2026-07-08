@@ -3,6 +3,7 @@ package vn.vnpt.payment.infrastructure.stripe;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import vn.vnpt.payment.application.port.AuthorizePaymentCommand;
 import vn.vnpt.payment.application.port.PaymentPort;
@@ -23,6 +24,7 @@ import vn.vnpt.util.common.SnowflakeIdGenerator;
  * for transient failures (5xx, network timeout) the saga compensator retries.
  */
 @Component
+@Profile("test")
 public class StripePaymentAdapter implements PaymentPort {
 
   private final Map<Long, List<CallRecord>> calls = new ConcurrentHashMap<>();

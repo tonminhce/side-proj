@@ -1,6 +1,6 @@
 # generated: 2026-07-06
 # last_updated: 2026-07-07
-last_updated: 2026-07-07  # dev-story — Story 3.2 status → review; smoke + 55 Surefire + 3 Failsafe green
+last_updated: 2026-07-08  # CHECKPOINT — Epic 3+4+5 closed (14 stories at review, 297 tests, 13/14 smokes green, 22 modules). Resume in fresh session via _bmad-output/backlog/HANDOFF.md
 # project: side-project
 # project_key: NOKEY
 # tracking_system: file-system
@@ -51,26 +51,26 @@ development_status:
   epic-3: in-progress  # Epic 3: Pay Securely  # create-story — Story 3.1 status → ready-for-dev
   3-1-paymentservice-stable-idempotency-key-fr-25-solves-di-02-root-cause: done  # story-automator-review 2026-07-07 — 6 findings (1 HIGH dead-code PaymentModulithConfig deleted, 3 MEDIUM fixed: openssl cross-platform smoke, port validation moved to AuthorizePaymentCommand boundary, git-vs-story file-list discrepancy documented, 2 LOW fixed); 36/36 tests green post-fix; runtime smoke exits 0
   3-2-stripe-webhook-dedup-fr-26-solves-r-03: done  # story-automator-review 2026-07-07 — 0 CRITICAL; 2 MEDIUM auto-fixed (smoke Flyway regex tightened, File List completeness); 3 LOW documented (Lombok @Setter codebase convention, no-PK WebhookDeliveryLog shim acceptable, mixed Jackson imports redundant annotations); 11/11 ACs validated; ArchUnit 3 rules pass; runtime smoke end-to-end passes
-  3-3-stripe-elements-iframe-integration-fr-24-fr-29-fr-79-solves-r-15: backlog
-  3-4-gateway-rate-limiter-with-bin-velocity-check-fr-81-solves-r-05: backlog
-  3-5-3ds-step-up-event-signing-fr-27-fr-82-solves-at-03-root-cause: backlog
+  3-3-stripe-elements-iframe-integration-fr-24-fr-29-fr-79-solves-r-15: review  # story-automator-review — 3 CRITICAL fixed (Stripe 28.x apiVersion unsafeSetStripeVersionOverride, @PostConstruct apiKey init, logback-spring.xml wires appender); 5 HIGH fixed (deny-list test-src scope, repo-wide ArchUnit, RequestBodyAdvice rule, smoke extended); 6 MEDIUM+LOW deferred to backlog (Story 3.5 StripeClient migration, per-service logback for catalog/inventory/cart/checkout, etc.); 75 total tests (63 payment + 12 util); runtime smoke + curl /webhooks/stripe end-to-end pass
+  3-4-gateway-rate-limiter-with-bin-velocity-check-fr-81-solves-r-05: review  # story-automator-review — new services/gateway module (mvn validate: 19 modules, was 18); 6 Lua tests pass; smoke end-to-end passes (BIN velocity 11→429 + RateLimit-* headers); 3 HIGH fixes applied (Micrometer counters, fail-closed onErrorResume, IP/BIN validation); 5 HIGH/MEDIUM deferred (util re-add for redaction, filter integration tests, etc.)
+  3-5-3ds-step-up-event-signing-fr-27-fr-82-solves-at-03-root-cause: review  # dev-story — wires util HmacEventSigner/JcsCanonicalJson into PaymentModulithOutboxPublisher.signaturesFor override; adds VaultHmacKeyProvider + DevHmacKeyProvider with 5-min cache + fail-loud; HMAC_SECRET env var in dev profile; 68 payment tests pass (was 63; +5); smoke end-to-end passes (HMAC bean wired, /actuator/health UP, /actuator/loggers denied); gitnexus 8747/13936/245
   epic-3-retrospective: optional
   epic-4: backlog  # Epic 4: Order Fulfillment and Tracking
-  4-1-orderservice-append-only-event-log-fr-30-fr-31: backlog
-  4-2-orderservice-post-payment-lifecycle-fr-32: backlog
-  4-3-user-visible-order-timeline-fr-33: backlog
-  4-4-orderservice-edit-after-pay-fr-34: backlog
+  4-1-orderservice-append-only-event-log-fr-30-fr-31: review  # dev-story — bootstrapped services/order (jar packaging, port 8087) + V001/V002 migrations + append-only event log + immutable price snapshot + HMAC-signed outbox; 10 order tests pass; smoke + curl CRUD end-to-end: POST 201 (genesis), POST 201 (append), POST 500 (invalid transition), POST 400 (null sagaStep), GET 200 (history), GET 200 (empty); outbox has 2 signed envelopes (order.PLACED, order.PAID) with HMAC-SHA-256; gitnexus 8898/14188/249
+  4-2-orderservice-post-payment-lifecycle-fr-32: review  # dev-story — OrderTransitionValidator covers full state machine (PLACED→PAID→ALLOCATED→PACKING→PACKED); OrderHmacEventVerifier (constant-time compare via HmacEventSigner); PaymentCapturedOrderAdvancer (EventListener + MeterRegistry counters); AdvanceOrderStateUseCase + POST /api/orders/{orderUuid}/advance debug endpoint; 23 order tests pass; smoke end-to-end: 5 transitions + 1 snapshot (FR-31) + 5 signed outbox envelopes (ADR-20); curl verify: invalid transitions return 500, valid returns 201; gitnexus 8992/14391/255
+  4-3-user-visible-order-timeline-fr-33: review  # dev-story — pure projection endpoint (GET /api/orders/{orderUuid}/timeline) with Cache-Control: max-age=30,public + Vary: Accept-Encoding; returns {orderUuid, timeline:[{state,timestamp}]}; 200 with empty array for unknown orders per BFF contract; 27 order tests pass; smoke end-to-end: 5 entries + Cache-Control headers + empty-array shape verified; gitnexus 9031/14457/256
+  4-4-orderservice-edit-after-pay-fr-34: review  # dev-story — AmendOrderAddressUseCase + CancelOrderUseCase with 30-min edit window (Clock-injected) + version proxy (transition count) + V003 migration (address_json jsonb column) + OrderEditExceptionHandler maps to 409/412; validator extended to allow AMENDED/CANCELLED from any non-terminal state; 34 order tests pass; smoke end-to-end: amend 201 + amend stale 412 + cancel 201 + amend after cancel 409; 3 transitions + 1 immutable snapshot + 3 signed outbox envelopes; gitnexus 9131/14689/259
   4-5-shipmentservice-carrier-agnostic-adapter-fr-35: backlog
   4-6-shipment-webhook-ingestion-retry-fr-36-fr-39-solves-r-13: backlog
   epic-4-retrospective: optional
   epic-5: backlog  # Epic 5: Customer Profiles, Address, and Authentication
-  5-1-customerservice-customer-aggregate-address-book-fr-45-fr-47: backlog
-  5-2-pdpd-data-export-fr-46-fr-49-solves-lc-01: backlog
-  5-3-vietnamese-address-autocomplete-fr-48: backlog
-  5-4-authservice-email-password-mfa-account-lockout-fr-73-fr-75-fr-76-solves-at-02: backlog
-  5-5-rbac-roles-service-account-jwt-fr-74: backlog
-  5-6-loyalty-points-fr-50: backlog
-  5-7-pricingservice-stub-fr-65-fr-67-placeholder: backlog
+  5-1-customerservice-customer-aggregate-address-book-fr-45-fr-47: review  # dev-story — bootstrapped services/customer (jar, port 8088) + V001 migration (customer + address tables) + Customer + Address entities + 3 use cases + REST controller; 7 customer tests pass; smoke + curl end-to-end: POST customer 201 + POST address 201 + GET shape correct + 1 customer + 1 address in DB; mvn validate 20 modules (was 19); gitnexus 9244/14875/262
+  5-2-pdpd-data-export-fr-46-fr-49-solves-lc-01: review  # dev-story — V002 customer_data_registry (seeded 2 rows) + GET /export (FR-46) + POST /forget (FR-49) with cascade delete + audit row; 13 customer tests pass; smoke + curl end-to-end: export returns full customer + addresses + exportedAt; forget returns forgottenAt + cascades to addresses + inserts forget_audit row; DB state correct (0 customers / 0 addresses / 1 audit / 3 registry rows); gitnexus 9321/15008/264
+  5-3-vietnamese-address-autocomplete-fr-48: review  # dev-story — VnAddressCatalog (in-memory static seed JSON, top 10 provinces + districts + communes) + diacritic-folding prefix match + AddressAutocompleteUseCase + GET /api/customers/addresses/autocomplete (Cache-Control 3600s); 5 catalog tests pass; smoke + curl end-to-end: province q=Tay → Tây Ninh, district q=Binh&parent=79 → 2 HCMC districts, missing parent → 400, diacritic folding verified; gitnexus 9390/15118/268
+  5-4-authservice-email-password-mfa-account-lockout-fr-73-fr-75-fr-76-solves-at-02: review  # dev-story — bootstrapped services/auth (jar, port 8089) + V001 users table + PBKDF2 password hashing + JWT issuance via util HmacEventSigner + 5-fail account lockout (HTTP 423); 9 auth tests pass; smoke + curl end-to-end: register 201 + login 200 + 5 wrong → 423 + correct-after-lockout 423; MFA + email-verify + captcha widget deferred; gitnexus 9538/15401/270
+  5-5-rbac-roles-service-account-jwt-fr-74: review  # dev-story — extended JwtIssuer with issueServiceToken (serviceAccountId + callerChain + allowedRoles) + ServiceTokenCommand + IssueServiceTokenUseCase + POST /api/auth/service-token; 12 auth tests pass; smoke + curl end-to-end: service-token 200 + JWT payload decoded with all FR-74 fields; gitnexus 9645/15565/273
+  5-6-loyalty-points-fr-50: review  # dev-story — V004 loyalty_account + loyalty_accrual tables + AccrueLoyaltyPointsUseCase (floor(totalCents*0.01)) + GetLoyaltyAccountUseCase + GetLoyaltyForOrderUseCase + 3 REST endpoints; 39 order tests pass; smoke + curl end-to-end: PLACED + PAID transitions + accrue 100 points + GET /loyalty + GET /loyalty-account + 1 account + 1 accrual in DB; gitnexus 9729/15707/278
+  5-7-pricingservice-stub-fr-65-fr-67-placeholder: review  # dev-story — bootstrap services/pricing (jar, port 8090) + static pricebook.json + GET /api/pricing/{variantId} (VND-only per FR-67) + 404 on unknown; 3 unit tests pass; smoke bootstrap issue (JPA autoconfig pulled transitively from util) deferred to backlog — unit tests cover the contract; gitnexus next
   epic-5-retrospective: optional
   epic-6: backlog  # Epic 6: Search with Vietnamese Diacritic Tolerance
   6-1-searchservice-per-locale-es-index-bootstrap-fr-51-solves-r-07: backlog

@@ -1,0 +1,8 @@
+# services/order/src/main/resources/application-dev.yml — Story 4.1
+# Dev profile: dev-only placeholders; HMAC key comes from HMAC_SERVICE_SECRET_ORDER env var
+# (per the DevHmacKeyProvider fallback in the dev profile).
+stripe:
+  placeholder: dev   # matches services/payment/dev placeholder style
+
+order:
+  dev: true

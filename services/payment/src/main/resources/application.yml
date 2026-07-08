@@ -63,6 +63,9 @@ management:
     web:
       exposure:
         include: health,info   # AC #1 / #11 /actuator/health; Story 10.1 expands the surface.
+        # NOTE: Story 3.3 (R-15) — `loggers` is intentionally NOT in the include list. The
+        # request-body-logger deny-list (FR-29) keeps this endpoint off so PAN-shaped fields
+        # cannot be probed via /actuator/loggers.
   endpoint:
     health:
       show-details: always
@@ -99,3 +102,11 @@ tenants:
       driverClassName: org.postgresql.Driver
       username: ${POSTGRES_PAYMENT_USER:payment_user}
       password: ${POSTGRES_PAYMENT_PASSWORD:payment_pass}
+
+# Story 3.3 (FR-24, FR-29, ADR-23, R-15): Stripe Elements iframe + redaction infra.
+# Dev profile overrides with `application-dev.yml`; prod reads STRIPE_API_KEY from Vault per ADR-21.
+stripe:
+  mode: ${STRIPE_MODE:real}                                                  # real | test
+  api-key: ${STRIPE_API_KEY:}                                                # empty default; Vault injects in prod
+  api-version: "2025-09-30.clover"                                           # pinned per R-12
+  webhook-signing-secret: ${STRIPE_WEBHOOK_SECRET:}                          # placeholder; Story 3.5 wires HMAC

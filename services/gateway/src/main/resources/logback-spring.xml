@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Story 3.4 (gateway).
+
+  Re-declares the REDACTING_CONSOLE appender locally rather than including
+  util/.../logback-include.xml, because the gateway does NOT depend on util (Story 3.4 dropped
+  the util dep to avoid Postgres-driver / JPA autoconfig bleed-through). The PanRedactingAppender
+  class is no longer reachable from the gateway's classpath — R-15 log redaction therefore does
+  NOT apply here. That's acceptable for the gateway because:
+
+    1. The gateway never sees PAN-shaped fields (it sees X-Card-Bin + X-Card-Last4, hashed to
+       fingerprint before any log line could carry them).
+    2. The gateway's reactive filter chain is the outermost defense in PCI scope minimization;
+       a request-body logger is not enabled (deny-list baseline from Story 3.3).
+
+  ponytail: if a future story needs gateway-side redaction, the cleanest path is to re-add util
+  as a dep OR copy PanRedactingAppender + PanRedactor into the gateway module.
+-->
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

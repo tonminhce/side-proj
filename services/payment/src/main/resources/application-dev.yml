@@ -1,0 +1,9 @@
+# services/payment/src/main/resources/application-dev.yml — Story 3.3
+# Dev profile: test-mode Stripe key (placeholder, never a real key) so the real adapter is active
+# but never makes a real Stripe API call in dev. The test profile (@Profile("test")) uses the
+# test-double adapter instead.
+stripe:
+  mode: test
+  api-key: sk_test_dev_placeholder    # NEVER a real key; documented marker for "dev never hits Stripe"
+  api-version: "2025-09-30.clover"
+  webhook-signing-secret: ""

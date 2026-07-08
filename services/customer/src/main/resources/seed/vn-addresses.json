@@ -1,0 +1,42 @@
+{
+  "provinces": [
+    { "uuid": "01", "provinceName": "Hà Nội" },
+    { "uuid": "79", "provinceName": "TP Hồ Chí Minh" },
+    { "uuid": "31", "provinceName": "Hải Phòng" },
+    { "uuid": "48", "provinceName": "Đà Nẵng" },
+    { "uuid": "92", "provinceName": "Cần Thơ" },
+    { "uuid": "44", "provinceName": "An Giang" },
+    { "uuid": "74", "provinceName": "Bình Dương" },
+    { "uuid": "75", "provinceName": "Đồng Nai" },
+    { "uuid": "72", "provinceName": "Tây Ninh" },
+    { "uuid": "77", "provinceName": "Bà Rịa - Vũng Tàu" }
+  ],
+  "districts": {
+    "01": [
+      { "uuid": 1, "districtName": "Quận Ba Đình" },
+      { "uuid": 2, "districtName": "Quận Hoàn Kiếm" },
+      { "uuid": 3, "districtName": "Quận Tây Hồ" },
+      { "uuid": 4, "districtName": "Quận Long Biên" }
+    ],
+    "79": [
+      { "uuid": 760, "districtName": "Quận 1" },
+      { "uuid": 765, "districtName": "Quận Bình Thạnh" },
+      { "uuid": 766, "districtName": "Quận Tân Bình" },
+      { "uuid": 767, "districtName": "Quận Gò Vấp" }
+    ],
+    "48": [
+      { "uuid": 490, "districtName": "Quận Hải Châu" },
+      { "uuid": 491, "districtName": "Quận Thanh Khê" }
+    ]
+  },
+  "communes": {
+    "1": [
+      { "uuid": 1, "communeName": "Phường Điện Biên" },
+      { "uuid": 3, "communeName": "Phường Trúc Bạch" }
+    ],
+    "765": [
+      { "uuid": 26500, "communeName": "Phường 1" },
+      { "uuid": 26530, "communeName": "Phường 25" }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "entries": [
+    { "variantId": "variant-1", "listPriceCents": 1990000, "salePriceCents": 1790000, "currency": "VND" },
+    { "variantId": "variant-2", "listPriceCents": 2500000, "salePriceCents": null,    "currency": "VND" },
+    { "variantId": "variant-3", "listPriceCents": 500000,  "salePriceCents": 450000,  "currency": "VND" }
+  ]
+}

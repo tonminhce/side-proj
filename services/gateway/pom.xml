@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>vn.vnpt</groupId>
+        <artifactId>side-project</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>gateway</artifactId>
+    <packaging>jar</packaging>
+
+    <name>gateway</name>
+    <description>Gateway — card-testing defense (FR-81, R-05): Lua rate-limiter + BIN velocity per ADR-13 + ADR-24</description>
+
+    <dependencies>
+        <!--
+          Story 3.4 / R-05: The gateway is a stateless reactive filter; it does NOT depend on util
+          (which transitively pulls in Postgres driver + JPA + Lombok + spring-modulith, causing
+          DataSourceAutoConfiguration to fail at boot since the gateway has no DB). The gateway
+          brings in only what it needs: Spring Boot's BOMs (managed by the parent pom's
+          spring-boot-dependencies + spring-cloud-dependencies) + spring-cloud-gateway-server-webflux
+          + spring-boot-starter-data-redis-reactive + actuator.
+        -->
+
+        <!-- Spring Cloud Gateway (WebFlux-based; reactive filter chain). -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-gateway-server-webflux</artifactId>
+        </dependency>
+
+        <!-- Spring Boot WebFlux starter — pulled in transitively by older versions of gateway but
+             Spring Boot 4.0 + spring-cloud-gateway-server-webflux 5.x requires this explicit dep
+             (gateway emits a "Spring Webflux is missing from the classpath" warning at boot). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- Spring Web (HttpStatusCode type) — pulled in by gateway abstractions but not transitively
+             by spring-cloud-gateway-server-webflux under Spring Boot 4. Add explicitly. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+
+        <!-- Reactive Redis: Lua scripts run via ReactiveRedisTemplate from the reactive filter chain. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- Actuator: /actuator/health + /actuator/metrics for AC #6, #9. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Test scope -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test scope: tests connect to the running Redis container (from dev docker-compose) via
+             DynamicPropertySource; no testcontainers/redis artifact needed (not published separately).
+             Other testcontainers deps (postgresql, junit-jupiter) are pulled transitively from the
+             other services' test classpath; gateway doesn't need them. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ponytail: util's Lombok is <optional>, declare directly. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.42</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
+                <configuration>
+                    <release>25</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.42</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>4.0.0</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

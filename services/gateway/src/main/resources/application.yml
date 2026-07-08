@@ -1,0 +1,79 @@
+# services/gateway/src/main/resources/application.yml — Story 3.4
+# Card-testing defense: rate-limiter + BIN velocity per ADR-13 + ADR-24.
+
+server:
+  port: 8080   # Gateway default; downstream services occupy 8081-8086.
+
+spring:
+  application:
+    name: gateway
+
+  main:
+    allow-bean-definition-overriding: true   # mirror services/payment's allow-override
+
+  autoconfigure:
+    # Mirror util exclusion pattern (util's UtilsAutoConfiguration has pre-existing @Component /
+    # @ConfigurationProperties dual-bean bug).
+    # GatewayLoadBalancerClientAutoConfiguration / GatewayNoLoadBalancerClientAutoConfiguration
+    # need spring-cloud-starter-loadbalancer OR exclusion. We don't have a service registry in
+    # v1; routes use direct `uri: http://...` so the LB filter is unnecessary.
+    # JPA / DataSource / Hibernate exclusions: util pulls in the Postgres driver + JPA annotations
+    # transitively. The gateway is a stateless reactive filter — no DB. Without these exclusions
+    # Spring Boot auto-configures a HikariCP DataSource from the JPA starter and fails on missing
+    # driver-class / DataSourceProperties.
+    exclude:
+      - vn.vnpt.util.UtilsAutoConfiguration
+      - org.springframework.cloud.gateway.config.GatewayNoLoadBalancerClientAutoConfiguration
+      - org.springframework.cloud.gateway.config.GatewayLoadBalancerClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          enabled: true
+          discovery:
+            locator:
+              enabled: false
+          routes:
+            - id: payment
+              uri: http://localhost:8086
+              predicates:
+                - Path=/api/payment/**
+              filters:
+                - name: RateLimiter
+                  args:
+                    capacity: 100
+                    refillPerSec: 10
+                    ttlSec: 3600
+                    cost: 1
+                    windowMinutes: 60
+                    binVelocityMaxAttempts: 10
+
+# FR-29 / R-15 deny-list: /actuator/loggers and /actuator/httptrace stay off.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics   # AC #9: metrics added for the rate-limit counters
+  endpoint:
+    health:
+      show-details: always
+
+# Logging baseline — PanRedactingAppender (Story 3.3) wired via logback-spring.xml <include>.
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    reactor.netty: INFO
+
+# util's pre-existing @Component / @ConfigurationProperties dual-bean workarounds
+# (Story 0.5 baseline; gateway doesn't depend on util — these blocks are intentionally absent
+# because the gateway is stateless + Redis-only. MEDIUM-1 review fix.)
+# folder: / file: / tenants: blocks removed (would have been inert + confusing + expose minio creds)
