@@ -9,14 +9,21 @@ spring:
     allow-bean-definition-overriding: true
 
   autoconfigure:
+    # Pricing has no DB; suppress every Spring Boot 4 autoconfig that touches
+    # JDBC / JPA / Hibernate / Flyway / Redis health. Package paths shifted
+    # in Spring Boot 4 (org.springframework.boot.{module}.autoconfigure.*) —
+    # the old spring-autoconfigure.{module}.* names silently no-op'd, which
+    # is why Story 5.7 smoke bootstrap failed.
     exclude:
       - vn.vnpt.util.UtilsAutoConfiguration
       - vn.vnpt.util.events.EventsAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
-      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.RedisAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration
+      - org.springframework.boot.data.jpa.autoconfigure.JpaRepositoriesAutoConfiguration
+      - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
 
   # Pricing has no DB; the YAML exclusion of DataSource + JPA + Flyway prevents the autoconfig
   # from trying to build a DataSource. The static pricebook is loaded from pricebook.json.
@@ -29,6 +36,12 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    # Pricing has no Redis container in dev (Story 5.7 stub); the Redis health
+    # indicator would always be DOWN and pull the overall status to DOWN.
+    # Disable it so /actuator/health reflects the actual app state.
+    redis:
+      enabled: false
 
 # FR-67 multi-currency: v1 is VND-only. Static FX rate (1.0 = no conversion).
 pricing:
