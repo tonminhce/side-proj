@@ -107,19 +107,24 @@ public class HandleStripeWebhookUseCase implements StripeWebhookHandler {
           log.warn("Skipping payment.refunded: missing data.object.payment_intent on event {}", event.id());
           return;
         }
+        // orderUuid MUST come from data.object.metadata.order_uuid — charge.refunded doesn't
+        // propagate metadata from the parent PaymentIntent by default, so we require the merchant
+        // to set metadata.order_uuid on the charge itself (e.g., via the Stripe dashboard or
+        // transfer_data). Without it, the consumer can't correlate the refund to an order.
+        Long orderUuid = extractOrderUuid(dataObj);
         long amountRefunded = dataObj.has("amount_refunded") ? dataObj.get("amount_refunded").asLong(0L) : 0L;
         String currency = textOrNull(dataObj, "currency");
-        if (currency == null) {
-          log.warn("Skipping payment.refunded: missing currency on event {}", event.id());
+        if (orderUuid == null || currency == null) {
+          log.warn("Skipping payment.refunded: missing orderUuid or currency on event {} "
+              + "(orderUuid={}, currency={}); charge.refunded must carry metadata.order_uuid",
+              event.id(), orderUuid, currency);
           return;
         }
-        // orderUuid is NOT in the charge payload — set to 0 sentinel; consumers must look up by piId
-        // until the Stripe metadata convention is extended to refunds (separate story).
         outboxPublisher.append(
             "Payment",
             Long.parseLong(stripNonDigits(piId)),
             "payment.refunded",
-            new PaymentRefundedEvent(0L, piId, amountRefunded, currency.toUpperCase(),
+            new PaymentRefundedEvent(orderUuid, piId, amountRefunded, currency.toUpperCase(),
                 LocalDateTime.now(ZoneOffset.UTC)),
             Map.of());
       }

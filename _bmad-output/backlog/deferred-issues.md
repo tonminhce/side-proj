@@ -236,7 +236,32 @@ refunds; reconciliation needs to learn about refunds to update ledger / emit ref
 that looks up the order by `paymentIntentId` (new repository method
 `OrderRepository.findByPaymentIntentId`) and appends a `REFUNDED` transition via the existing
 `AppendOrderTransitionUseCase`. ~40 lines + 2 tests.
-**Status:** open — `payment.refunded` event is published; the consumer side is the missing piece.
+**Status:** fixed-in-commit-<pending> (2026-07-08 cycle 6)
+
+### Resolution (cycle 6)
+
+Producer-side prerequisite: `HandleStripeWebhookUseCase.TYPE_CHARGE_REFUNDED` now requires
+`data.object.metadata.order_uuid` (the merchant must set this on the charge; Stripe doesn't
+propagate PI metadata automatically). When missing, the publish is skipped with a warning
+(the audit trail stays intact). This ensures the consumer always receives an `orderUuid`.
+
+Order-side consumer: `PaymentRefundedOrderAdvancer` mirrors `PaymentCapturedOrderAdvancer`:
+- `@EventListener` + `@Transactional`
+- Looks up the latest transition; only advances from `PAID` (refund-after-terminal is a manual
+  ops flow)
+- Fetches the existing price snapshot (FR-31 contract requires non-null snapshot on every
+  transition)
+- Appends `PAID → REFUNDED` via `AppendOrderTransitionUseCase`
+- `OrderState.REFUNDED` added to enum + `OrderTransitionValidator` + added to `TERMINAL` set
+
+Tests: order 45/45 (was 42; +3 for validator REFUNDED transitions) + 3 new
+`PaymentRefundedOrderAdvancerTest` cases. Payment: 97/97 (was 96; +1 for missing-metadata
+test).
+
+Resolves FR-32 partial gap. **Note:** the entry's proposed fix originally called for a
+`findByPaymentIntentId` repository method — that turned out to be unnecessary because the
+producer now reliably populates `orderUuid`, so the consumer can use the existing
+`transitionRepository.findFirstByOrderUuidOrderByIdDesc(orderUuid)` lookup directly.
 
 ---
 

@@ -44,4 +44,26 @@ class OrderTransitionValidatorTest {
     OrderTransitionValidator v = new OrderTransitionValidator();
     assertThat(v.isAllowed(OrderState.PAID, OrderState.PACKING)).isFalse();
   }
+
+  @Test
+  void PAID_to_REFUNDED_allowed_paymentRefundedSaga() {
+    // Story 3.5 follow-up #4: PAID → REFUNDED is the saga transition on payment.refunded.
+    OrderTransitionValidator v = new OrderTransitionValidator();
+    assertThat(v.isAllowed(OrderState.PAID, OrderState.REFUNDED)).isTrue();
+  }
+
+  @Test
+  void REFUNDED_isTerminal_noFurtherTransitions() {
+    OrderTransitionValidator v = new OrderTransitionValidator();
+    assertThat(v.isAllowed(OrderState.REFUNDED, OrderState.PAID)).isFalse();
+    assertThat(v.isAllowed(OrderState.REFUNDED, OrderState.CANCELLED)).isFalse();
+    assertThat(v.isAllowed(OrderState.REFUNDED, OrderState.SHIPPED)).isFalse();
+  }
+
+  @Test
+  void PLACED_to_REFUNDED_rejected_mustGoThroughPaid() {
+    // Refund from PLACED is rejected — must transition through PAID first.
+    OrderTransitionValidator v = new OrderTransitionValidator();
+    assertThat(v.isAllowed(OrderState.PLACED, OrderState.REFUNDED)).isFalse();
+  }
 }

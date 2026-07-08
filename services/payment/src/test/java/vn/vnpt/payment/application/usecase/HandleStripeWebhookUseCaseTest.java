@@ -132,12 +132,15 @@ class HandleStripeWebhookUseCaseTest {
         .thenReturn(new AppendOutcome(true, FIXED_TS));
     HandleStripeWebhookUseCase useCase = newUseCase();
 
-    // Stripe charge.refunded payload: data.object.payment_intent=pi_X, amount_refunded=50000, currency=vnd
+    // Stripe charge.refunded payload: data.object.payment_intent=pi_X, amount_refunded=50000,
+    // currency=vnd, AND metadata.order_uuid=4242 (required since the charge payload doesn't
+    // propagate the parent PI metadata by default).
     ObjectNode data = MAPPER.createObjectNode();
     ObjectNode obj = data.putObject("object");
     obj.put("payment_intent", "pi_987654321");
     obj.put("amount_refunded", 50000);
     obj.put("currency", "vnd");
+    obj.putObject("metadata").put("order_uuid", "4242");
 
     StripeWebhookEvent event = new StripeWebhookEvent(
         "evt_refund", "charge.refunded", false, data, 1700000000L);
@@ -194,13 +197,40 @@ class HandleStripeWebhookUseCaseTest {
 
     // data.object present but no payment_intent field → skip
     ObjectNode data = MAPPER.createObjectNode();
-    data.putObject("object").put("amount_refunded", 5000);
+    ObjectNode obj = data.putObject("object");
+    obj.put("amount_refunded", 5000);
+    obj.put("currency", "vnd");
+    obj.putObject("metadata").put("order_uuid", "4242");
 
     StripeWebhookEvent event = new StripeWebhookEvent(
         "evt_bad_refund", "charge.refunded", false, data, 1700000000L);
     useCase.execute(event);
 
     verify(outboxPublisher, never()).append(anyString(), anyLong(), anyString(), any(), any());
+  }
+
+  @Test
+  void execute_chargeRefunded_missingMetadataOrderUuid_skipsPublish() {
+    when(dedupPort.append(anyString(), anyString(), anyBoolean(), any()))
+        .thenReturn(new AppendOutcome(true, FIXED_TS));
+    HandleStripeWebhookUseCase useCase = newUseCase();
+
+    // payment_intent + currency present but NO metadata.order_uuid — skip the publish
+    // (charge.refunded doesn't propagate PI metadata; we require explicit metadata.order_uuid
+    // on the charge itself).
+    ObjectNode data = MAPPER.createObjectNode();
+    ObjectNode obj = data.putObject("object");
+    obj.put("payment_intent", "pi_777777777");
+    obj.put("amount_refunded", 50000);
+    obj.put("currency", "vnd");
+
+    StripeWebhookEvent event = new StripeWebhookEvent(
+        "evt_refund_no_meta", "charge.refunded", false, data, 1700000000L);
+    useCase.execute(event);
+
+    verify(outboxPublisher, never()).append(anyString(), anyLong(), anyString(), any(), any());
+    // delivery-log row still records the webhook
+    verify(deliveryLogPort, times(1)).record("evt_refund_no_meta", "charge.refunded", "delivery-handled");
   }
 
   private HandleStripeWebhookUseCase newUseCase() {
