@@ -124,7 +124,24 @@ Format per entry:
 **Severity:** HIGH (FR-82 / AT-03 contract requires both producer AND consumer-side signing)
 **Surface:** `services/checkout/.../infrastructure/outbox/` (consuming listener — file name TBD)
 **Proposed fix:** Add a consumer-side `HmacEventVerifier` util that reads the producer's secret from Vault (cached 5 min), recomputes HMAC over the canonical JSON, and rejects events with mismatched signatures. Wire into checkout's `@ApplicationModuleListener` for `payment.captured` / `payment.refunded` events.
-**Status:** open
+**Status:** **blocked-by-missing-producer** (2026-07-08 re-assessment)
+
+### Re-assessment (2026-07-08 cycle 2)
+
+The verifier (`PaymentEventSignatureVerifier`) + test (`PaymentEventSignatureVerifierTest`, 4 tests) already
+exist from prior sessions and are green. The remaining gap is **wiring it into a checkout listener**.
+
+**However**, the producer-side `payment.captured` / `payment.refunded` events are NOT YET published
+from the payment service (`grep "PaymentCapturedEvent"` returns 0 results in `services/payment/src/main`).
+The producer side lives in a separate deferred item (outbox events for payment webhook fan-out).
+
+**Recommendation:** defer the consumer-side listener wiring to a story that ships together with the
+producer side. Wiring a listener that has nothing to listen for is over-engineering (the listener would
+silently no-op until the producer lands, with no signal to know whether it works). The verifier is
+ready; the listener is the cheap 30-line addition once the producer is real.
+
+**Real blocker:** producer-side `payment.captured` / `payment.refunded` events — separate deferred item,
+not in this session's scope.
 
 ---
 
