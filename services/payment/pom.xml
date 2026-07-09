@@ -114,6 +114,27 @@
             <version>1.20.4</version>
             <scope>test</scope>
         </dependency>
+        <!--
+          Testcontainers Kafka — cross-process payment→order event bridge IT (Story 4.1 follow-up).
+          Single-node KRaft image, no Zookeeper. Version pinned to 1.20.4 to match the existing
+          testcontainers postgresql/junit-jupiter pin.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+          Kafka client — payment→order event bridge (Story 4.1 follow-up). Version is BOM-managed
+          (Spring Boot 4.0.0 → kafka-clients 4.x). Used by PaymentEventKafkaBridge poller to publish
+          outbox rows to the payment.events topic. No spring-kafka: hand-rolled KafkaProducer keeps
+          the dep count down (the bridge is 80 LOC, not worth a framework).
+        -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+        </dependency>
 
         <!--
           ponytail: util/pom.xml declares Lombok as <optional>true</optional> so it does NOT

@@ -118,6 +118,17 @@
             <version>1.18.42</version>
             <scope>provided</scope>
         </dependency>
+
+        <!--
+          Kafka client — payment→order event bridge consumer (Story 4.1 follow-up). Version is
+          BOM-managed (Spring Boot 4.0.0 → kafka-clients 4.x). Used by PaymentEventKafkaListener
+          to read payment.events records. No spring-kafka: hand-rolled KafkaConsumer keeps the
+          dep count down (the listener is ~120 LOC).
+        -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

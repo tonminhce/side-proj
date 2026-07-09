@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.modulith.ApplicationModule;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import vn.vnpt.payment.infrastructure.stripe.StripeProperties;
 
 /**
@@ -30,6 +31,7 @@ import vn.vnpt.payment.infrastructure.stripe.StripeProperties;
 @SpringBootApplication
 @ApplicationModule(displayName = "payment")
 @EnableConfigurationProperties(StripeProperties.class)
+@EnableScheduling   // Story 4.1 follow-up — payment→order event bridge (PaymentEventKafkaBridge).
 public class PaymentApplication {
 
   public static void main(String[] args) {

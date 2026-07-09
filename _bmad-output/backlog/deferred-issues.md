@@ -311,7 +311,61 @@ producer now reliably populates `orderUuid`, so the consumer can use the existin
 **Severity:** HIGH (FR-32 contract)
 **Surface:** `services/order/.../application/usecase/AppendOrderTransitionUseCase.java` (saga listener to be added)
 **Proposed fix:** Add a `@ApplicationModuleListener` that consumes `PaymentCapturedEvent` from the payment service's outbox bridge + invokes the existing `AppendOrderTransitionUseCase` with `OrderState.PAID`. Verify with an end-to-end smoke that posts a payment webhook and asserts the order_state_transition log has both PLACED + PAID rows.
-**Status:** open
+**Status:** **resolved-by-event-bridge (commit pending)**
+
+### Re-assessment 2026-07-09 — structural finding (audit + plan)
+
+**The proposed fix above is wrong.** Payment publishes
+`vn.vnpt.payment.application.event.PaymentCapturedEvent` in-process via Spring's
+`ApplicationEventPublisher` into `payment_db.outbox`; order's listener consumes
+`vn.vnpt.order.application.saga.event.PaymentCapturedEvent` — two different FQNs in
+two different JVMs. No `@Externalized` annotation, no Kafka producer/consumer
+config, no shared Maven module enforcing the wire shape. The intra-JVM
+`@ApplicationModuleListener` cannot bridge two separate Spring Modulith
+applications.
+
+### Resolution
+
+Implemented the **cross-service event bridge** (Story 4.1 follow-up #5,
+commit pending on `fix/r-01-util-parent-pom`):
+
+- **Shared wire contracts** in `util/src/main/java/vn/vnpt/util/events/contracts/`:
+  `PaymentEventEnvelope` (the JSON shape sent over Kafka) + `PaymentCapturedPayload` +
+  `PaymentRefundedPayload`. Both services compile against the same shape.
+- **Producer poller** in `services/payment/.../kafka/PaymentEventKafkaBridge`:
+  `@Scheduled(fixedDelayString = "${payment.bridge.poll-interval-ms:500}")` reads
+  `payment_db.outbox` for `published_at IS NULL` rows via
+  `SELECT ... FOR UPDATE SKIP LOCKED`, publishes to the existing `payment.events`
+  Kafka topic (8 partitions, 7d retention, pre-provisioned in
+  `dev/docker-compose.yml`), marks the row `published_at = now()`. Uses
+  `org.apache.kafka:kafka-clients` directly (BOM-managed, no `spring-kafka`).
+- **Consumer listener** in `services/order/.../kafka/PaymentEventKafkaListener`:
+  daemon thread + `KafkaConsumer.poll(500ms)`, calls the existing
+  `OrderHmacEventVerifier.verifyPaymentEventEnvelope(...)` on every record, then
+  re-publishes a `SignedPaymentCapturedEvent` (or `SignedPaymentRefundedEvent`)
+  to the in-process `ApplicationEventPublisher`. The existing
+  `PaymentCapturedOrderAdvancer.onPaymentCaptured(SignedPaymentCapturedEvent)` runs
+  unchanged — calls the verifier (no-op double-check), then
+  `AppendOrderTransitionUseCase` for `PLACED → PAID`.
+- **Cross-process IT** `PaymentOrderBridgeIT`: spins up Postgres + Kafka
+  testcontainers, boots both `@SpringBootApplication` contexts, seeds a payment
+  outbox row with a valid HMAC envelope, asserts the order's
+  `order_state_transition.to_state` advances to `PAID` within 30s and the
+  producer's `outbox.published_at` is set.
+- **`@EnableScheduling` added to `PaymentApplication`** (the `@Scheduled` poller
+  in the bridge was a missing piece — only `CartAutoExpireSweeperJob` and
+  `ReservationSweeperJob` had it via their own service's @SpringBootApplication;
+  payment did not).
+- **HMAC key sharing**: producer's `HmacServiceKeyProvider` and the order's
+  `HmacServiceKeyProvider` both read the same env var
+  `HMAC_SERVICE_SECRET_ORDER` (or `HMAC_SERVICE_SECRET`). The future Vault
+  isolation is the open `wontfix-intra-jvm` item from Story 3.5 follow-up #3 —
+  still tracked, still pending.
+
+The Story 4.1 follow-up "Saga integration" entry is now resolved end-to-end. The
+follow-up #3 "Wire PaymentEventSignatureVerifier into checkout listener" remains
+wontfix-intra-jvm (cross-JVM verification will land when the Kafka outbox bridge
+is extended to checkout).
 
 ---
 

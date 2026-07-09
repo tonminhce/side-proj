@@ -89,3 +89,17 @@ tenants:
       driverClassName: org.postgresql.Driver
       username: ${POSTGRES_ORDER_USER:order_user}
       password: ${POSTGRES_ORDER_PASSWORD:order_pass}
+
+# Cross-service event bridge — Story 4.1 follow-up, FR-32, ADR-14, ADR-20.
+# Consumes payment.events from Kafka, verifies HMAC envelopes, re-publishes SignedPayment*Event
+# to the in-process bus so the existing PaymentCapturedOrderAdvancer /
+# PaymentRefundedOrderAdvancer run unchanged. HMAC key is loaded from the same
+# HMAC_SERVICE_SECRET_ORDER env var that the saga's in-process verifier uses
+# (see OrderHmacEventVerifier javadoc — v1 shared-secret pattern; future Vault isolation).
+order:
+  bridge:
+    kafka:
+      bootstrap-servers: ${ORDER_BRIDGE_KAFKA_BOOTSTRAP:localhost:9092}
+      topic: payment.events
+      group-id: order-payment-bridge
+      poll-timeout-ms: 500

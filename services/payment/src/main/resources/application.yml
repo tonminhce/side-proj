@@ -110,3 +110,15 @@ stripe:
   api-key: ${STRIPE_API_KEY:}                                                # empty default; Vault injects in prod
   api-version: "2025-09-30.clover"                                           # pinned per R-12
   webhook-signing-secret: ${STRIPE_WEBHOOK_SECRET:}                          # placeholder; Story 3.5 wires HMAC
+
+# Cross-service event bridge — Story 4.1 follow-up, FR-32, ADR-14, ADR-20.
+# Polls payment_db.outbox for unpublished rows, publishes to Kafka topic payment.events, marks
+# published_at. The order service consumes the same topic and verifies HMAC envelopes before
+# advancing the saga. Defaults match dev/docker-compose.yml (Kafka KRaft single-node, 9092).
+payment:
+  bridge:
+    poll-interval-ms: 500
+    kafka:
+      bootstrap-servers: ${PAYMENT_BRIDGE_KAFKA_BOOTSTRAP:localhost:9092}
+      topic: payment.events
+      batch-size: 50
