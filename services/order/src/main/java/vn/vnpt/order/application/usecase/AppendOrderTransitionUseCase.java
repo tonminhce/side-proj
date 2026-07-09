@@ -47,6 +47,11 @@ public class AppendOrderTransitionUseCase {
   public long execute(AppendOrderTransitionCommand cmd) {
     Optional<OrderStateTransition> latest =
         transitionRepository.findFirstByOrderUuidOrderByIdDesc(cmd.orderUuid());
+    if (latest.isPresent()
+        && cmd.toState().name().equals(latest.get().getToState())
+        && cmd.sagaStep().equals(latest.get().getSagaStep())) {
+      return latest.get().getId();
+    }
     OrderState fromState = latest.map(t -> OrderState.valueOf(t.getToState())).orElse(null);
 
     if (!validator.isAllowed(fromState, cmd.toState())) {
@@ -58,8 +63,22 @@ public class AppendOrderTransitionUseCase {
     }
 
     // Insert price snapshot only on the first transition (FR-31 immutability).
+    // A concurrent genesis retry (e.g. client retry on 5xx) may race: both calls reach this
+    // point with fromState == null; the second save() collides on the snapshot's natural PK and
+    // would throw DataIntegrityViolationException without this guard. The snapshot data is
+    // identical in both calls (it's part of the command), so swallowing the duplicate and
+    // proceeding to the transition write is correct — the V005 unique index will catch the
+    // duplicate transition itself.
     if (fromState == null) {
-      priceSnapshotRepository.save(cmd.priceSnapshot());
+      try {
+        priceSnapshotRepository.saveAndFlush(cmd.priceSnapshot());
+      } catch (DataIntegrityViolationException e) {
+        // Concurrent genesis — the winning thread already inserted the same snapshot. Safe to
+        // fall through; the V005 transition unique index will catch a true duplicate below.
+        if (priceSnapshotRepository.findById(cmd.orderUuid()).isEmpty()) {
+          throw e;
+        }
+      }
     }
 
     OrderStateTransition transition = OrderStateTransition.builder()
@@ -70,7 +89,7 @@ public class AppendOrderTransitionUseCase {
         .eventId(SnowflakeIdGenerator.generateId())
         .createdAt(LocalDateTime.now())
         .build();
-    OrderStateTransition saved = transitionRepository.save(transition);
+    OrderStateTransition saved = transitionRepository.saveAndFlush(transition);
     appender.append(saved);
     return saved.getId();
   }

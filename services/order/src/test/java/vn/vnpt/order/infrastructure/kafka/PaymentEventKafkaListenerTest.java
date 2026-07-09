@@ -131,6 +131,23 @@ class PaymentEventKafkaListenerTest {
     assertEquals(1.0, meterRegistry.counter("order.bridge.event.error").count());
   }
 
+  @Test
+  void dispatchReThrowsOnDownstreamException() throws Exception {
+    // C2 fix: a transient in-process publish failure (e.g. downstream @Transactional rollback)
+    // must NOT cause the bridge to commit the offset silently. processRecord should propagate
+    // the exception so the poll loop skips commitSync for that batch.
+    PaymentEventEnvelope env = buildSignedEnvelope("payment.captured", buildCapturedPayload());
+    String json = mapper.writeValueAsString(env);
+
+    org.mockito.Mockito.doThrow(new IllegalStateException("downstream rollback"))
+        .when(publisher).publishEvent(org.mockito.ArgumentMatchers.any());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        IllegalStateException.class,
+        () -> listener.processRecord(
+            new ConsumerRecord<>("payment.events", 0, 5L, "Payment:1", json)));
+  }
+
   private String buildCapturedPayload() {
     return "{\"orderUuid\":1,\"paymentIntentId\":\"pi_abc\",\"amountCents\":1000,"
         + "\"currency\":\"VND\",\"occurredAt\":\"2026-07-09T10:00:00Z\"}";

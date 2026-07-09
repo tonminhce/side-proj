@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -108,22 +109,30 @@ public class PaymentEventKafkaListener {
         if (records.isEmpty()) {
           continue;
         }
+        // Track per-batch failure so a transient dispatch error skips the commit (the failing
+        // record will be redelivered on the next poll). C2 (closed 2026-07-09) used to swallow
+        // these inside dispatch*; the swallow was moved up here, with a per-record guard that
+        // DOES commit (bad JSON / bad envelope) but does NOT commit on a transient dispatch
+        // throw (e.g. downstream listener's @Transactional rollback).
+        boolean allCommitted = true;
         for (ConsumerRecord<String, String> record : records) {
           try {
             processRecord(record);
           } catch (RuntimeException e) {
-            // Per-record failure must not block the batch. Log, increment, fall through to commit.
+            // Transient: do not commit this batch. The bad record will replay and (per
+            // AppendOrderTransitionUseCase's V005 dedupe + the snapshot race fix) either succeed
+            // or be a known-good no-op.
+            allCommitted = false;
             errorCounter.increment();
-            log.error("processRecord failed at offset={} partition={}: {}",
+            log.error("processRecord failed at offset={} partition={} — NOT committing batch: {}",
                 record.offset(), record.partition(), e.getMessage());
           }
         }
-        consumer.commitSync();
+        if (allCommitted) {
+          consumer.commitSync();
+        }
       } catch (org.apache.kafka.common.errors.WakeupException w) {
         log.info("Bridge consumer wakeup — shutting down");
-        return;
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
         return;
       } catch (RuntimeException e) {
         log.warn("Bridge poll loop iteration failed: {}", e.getMessage());
@@ -172,52 +181,51 @@ public class PaymentEventKafkaListener {
   }
 
   private void dispatchCaptured(PaymentEventEnvelope envelope) {
-    try {
-      PaymentCapturedPayload payload = objectMapper.readValue(
-          envelope.payload(), PaymentCapturedPayload.class);
-      PaymentCapturedEvent event = new PaymentCapturedEvent(
-          payload.orderUuid(),
-          payload.paymentIntentId(),
-          payload.amountCents(),
-          payload.currency(),
-          LocalDateTime.parse(payload.occurredAt()));
-      SignedPaymentCapturedEvent signed = new SignedPaymentCapturedEvent(
-          envelope.eventId(),
-          envelope.aggregateType(),
-          envelope.aggregateId(),
-          envelope.payload(),
-          envelope.signatures(),
-          event);
-      applicationEventPublisher.publishEvent(signed);
-    } catch (Exception e) {
-      errorCounter.increment();
-      log.error("Failed to dispatch payment.captured event_id={}: {}",
-          envelope.eventId(), e.getMessage());
-    }
+    // parse + construct may throw (bad payload JSON, malformed occurredAt). Let it propagate to
+    // processRecord, which re-throws out to pollLoop, which then skips the offset commit so the
+    // record is replayed on the next poll. Silent swallow here was C2 (closed 2026-07-09).
+    PaymentCapturedPayload payload = objectMapper.readValue(
+        envelope.payload(), PaymentCapturedPayload.class);
+    PaymentCapturedEvent event = new PaymentCapturedEvent(
+        payload.orderUuid(),
+        payload.paymentIntentId(),
+        payload.amountCents(),
+        payload.currency(),
+        parseOccurredAt(payload.occurredAt()));
+    SignedPaymentCapturedEvent signed = new SignedPaymentCapturedEvent(
+        envelope.eventId(),
+        envelope.aggregateType(),
+        envelope.aggregateId(),
+        envelope.payload(),
+        envelope.signatures(),
+        event);
+    applicationEventPublisher.publishEvent(signed);
   }
 
   private void dispatchRefunded(PaymentEventEnvelope envelope) {
+    PaymentRefundedPayload payload = objectMapper.readValue(
+        envelope.payload(), PaymentRefundedPayload.class);
+    PaymentRefundedEvent event = new PaymentRefundedEvent(
+        payload.orderUuid(),
+        payload.paymentIntentId(),
+        payload.amountCents(),
+        payload.currency(),
+        parseOccurredAt(payload.occurredAt()));
+    SignedPaymentRefundedEvent signed = new SignedPaymentRefundedEvent(
+        envelope.eventId(),
+        envelope.aggregateType(),
+        envelope.aggregateId(),
+        envelope.payload(),
+        envelope.signatures(),
+        event);
+    applicationEventPublisher.publishEvent(signed);
+  }
+
+  private static LocalDateTime parseOccurredAt(String occurredAt) {
     try {
-      PaymentRefundedPayload payload = objectMapper.readValue(
-          envelope.payload(), PaymentRefundedPayload.class);
-      PaymentRefundedEvent event = new PaymentRefundedEvent(
-          payload.orderUuid(),
-          payload.paymentIntentId(),
-          payload.amountCents(),
-          payload.currency(),
-          LocalDateTime.parse(payload.occurredAt()));
-      SignedPaymentRefundedEvent signed = new SignedPaymentRefundedEvent(
-          envelope.eventId(),
-          envelope.aggregateType(),
-          envelope.aggregateId(),
-          envelope.payload(),
-          envelope.signatures(),
-          event);
-      applicationEventPublisher.publishEvent(signed);
-    } catch (Exception e) {
-      errorCounter.increment();
-      log.error("Failed to dispatch payment.refunded event_id={}: {}",
-          envelope.eventId(), e.getMessage());
+      return OffsetDateTime.parse(occurredAt).toLocalDateTime();
+    } catch (RuntimeException ignored) {
+      return LocalDateTime.parse(occurredAt);
     }
   }
 }
