@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Story 3.3 + Epic 4 MEDIUM sweep / FR-29 / R-15 / ADR-23.
+  Defense-in-depth redaction for the checkout service. See services/payment for the template.
+-->
+<configuration>
+    <include resource="logback-include.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="REDACTING_CONSOLE"/>
+    </root>
+</configuration>

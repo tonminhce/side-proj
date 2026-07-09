@@ -19,13 +19,22 @@
 
     <dependencies>
         <!--
-          Story 3.4 / R-05: The gateway is a stateless reactive filter; it does NOT depend on util
-          (which transitively pulls in Postgres driver + JPA + Lombok + spring-modulith, causing
-          DataSourceAutoConfiguration to fail at boot since the gateway has no DB). The gateway
-          brings in only what it needs: Spring Boot's BOMs (managed by the parent pom's
-          spring-boot-dependencies + spring-cloud-dependencies) + spring-cloud-gateway-server-webflux
-          + spring-boot-starter-data-redis-reactive + actuator.
+          util: needed for PanRedactingAppender (Story 3.3 R-15 defense-in-depth redaction).
+          Original Story 3.4 dropped the util dep to avoid Postgres-driver / JPA autoconfig bleed-
+          through. That risk is mitigated by the @EnableAutoConfiguration(excludeName=...) list on
+          GatewayApplication (DataSourceAutoConfiguration + HibernateJpaAutoConfiguration +
+          DataSourceTransactionManagerAutoConfiguration are excluded). util's spring-boot-starter-
+          data-jpa is <optional>true</optional> so it does not propagate; the runtime-scoped
+          Postgres driver is on the classpath but harmless without DataSourceAutoConfiguration.
+
+          Epic 4 MEDIUM sweep (deferred-issues.md Story 3.4 entry): re-add util to wire
+          logback-include.xml + PanRedactingAppender for the R-15 "across all services" contract.
         -->
+        <dependency>
+            <groupId>vn.vnpt</groupId>
+            <artifactId>util</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
 
         <!-- Spring Cloud Gateway (WebFlux-based; reactive filter chain). -->
         <dependency>

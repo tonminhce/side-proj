@@ -24,17 +24,13 @@ Format per entry:
 **Severity:** MEDIUM (latent — currently masked by Surefire forkMode=once but real in cross-service tests)
 **Surface:** `services/payment/.../RealStripePaymentAdapter.java:35`, `services/checkout/.../StripePaymentIntentGateway.java:41`
 **Proposed fix:** Replace static `Stripe.apiKey` setter with `StripeClient` (stripe-java 28.x per-instance). Constructor takes the key; per-call `client.paymentIntents().create(params)`.
-**Status:** open
-
----
-
-## [Story 3.3] 2026-07-07 — Per-service `logback-spring.xml` for catalog / inventory / cart / checkout
+**Status:** open — **re-classified at Epic 4 MEDIUM sweep 2026-07-09 as a refactor story, not a sweep item.** Touches both `RealStripePaymentAdapter` + `StripePaymentIntentGateway` + every test that mocks `Stripe.apiKey`. Not safe in a sweep; promote to a story with its own design pass (StripeClient constructor injection, profile-keyed bean wiring, test fixture migration).
 
 **Blocker:** Story 3.3 ships the `util/logback-include.xml` + `services/payment/logback-spring.xml` only. Other services don't have `logback-spring.xml` so the redaction appender isn't wired there.
 **Severity:** MEDIUM (defense-in-depth coverage gap — payment covers the PCI-critical path; other services log less cardholder-adjacent data, but the deny-list contract says "across all services")
 **Surface:** `services/{catalog,inventory,cart,checkout}/src/main/resources/logback-spring.xml` (do not exist)
 **Proposed fix:** Copy `services/payment/src/main/resources/logback-spring.xml` to each remaining service. Single-line `<include>` + `<root>`.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 MEDIUM sweep. 4 new files mirroring `services/payment/src/main/resources/logback-spring.xml` (catalog, inventory, cart, checkout). Each one is a 12-line `<configuration>` block that includes `logback-include.xml` and references `REDACTING_CONSOLE`.
 
 ---
 
@@ -84,7 +80,7 @@ Format per entry:
 **Severity:** MEDIUM (defense-in-depth; gateway never sees PAN today, but R-15 contract is "across all services")
 **Surface:** `services/gateway/pom.xml:21-28` + `services/gateway/src/main/resources/logback-spring.xml:1-28`
 **Proposed fix:** Re-add `vn.vnpt:util` as a `<scope>compile</scope>` dep; add JPA / DataSource autoconfig exclusions back; include `logback-include.xml` in gateway's `logback-spring.xml`. Verify boot path still clean.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 MEDIUM sweep. `vn.vnpt:util` re-added as compile dep (Story 3.4's drop was overcautious — the `@EnableAutoConfiguration(excludeName=...)` on `GatewayApplication` already excludes `DataSourceAutoConfiguration` + `HibernateJpaAutoConfiguration` + `DataSourceTransactionManagerAutoConfiguration`, and util's JPA dep is `<optional>true</optional>`). Gateway `logback-spring.xml` rewritten to include the shared `logback-include.xml` and reference `REDACTING_CONSOLE`.
 
 ---
 
@@ -291,7 +287,7 @@ producer now reliably populates `orderUuid`, so the consumer can use the existin
 **Severity:** MEDIUM (prod-readiness; dev works via env var)
 **Surface:** `services/payment/.../infrastructure/security/VaultHmacKeyProvider.java:48-50`
 **Proposed fix:** Add `spring-cloud-starter-vault-config` to `services/payment/pom.xml`; replace the stub `readFromVault()` with `VaultTemplate.read("secret/events/hmac/payment").getData().get("value")` (or the equivalent KV-v2 API).
-**Status:** open
+**Status:** open — **re-confirmed at Epic 4 MEDIUM sweep 2026-07-09 as prod-readiness, not dev-blocker.** The dev path works (env var); the prod path needs the `spring-cloud-starter-vault-config` integration. Schedule for the ops hardening story (1 day) when Vault is in scope; no action needed until then.
 
 ---
 
@@ -301,7 +297,7 @@ producer now reliably populates `orderUuid`, so the consumer can use the existin
 **Severity:** MEDIUM (FR-27 contract; saga can't advance to 3DS challenge without the new state)
 **Surface:** `services/checkout/.../domain/OrderStatus.java`
 **Proposed fix:** Add `PAYMENT_REQUIRES_ACTION` enum value; wire `OrderSagaOrchestrator.onPaymentRequiresAction()` listener.
-**Status:** open
+**Status:** open — **re-confirmed at Epic 4 MEDIUM sweep 2026-07-09 as needs-UX-input.** The 3DS challenge handoff shape (where does the user land after a REQUIRES_ACTION response? what does the BFF show?) needs a UX decision before the saga transition is designed. Schedule after the BFF team ships the storefront-side 3DS placeholder.
 
 ---
 
@@ -375,7 +371,7 @@ is extended to checkout).
 **Severity:** MEDIUM (FR-33 contract)
 **Surface:** `services/order/.../application/web/OrderController.java` (extend with the timeline shape)
 **Proposed fix:** Add a new endpoint shape that returns `[{ state, timestamp }]` per AC; cache for 30s in a CDN-friendly header.
-**Status:** open
+**Status:** fixed-in-commit-baa5aae (Epic 3 sprint 1) — Story 4.3 ships the exact endpoint: `GET /api/orders/{orderUuid}/timeline` with `Cache-Control: max-age=30,public` + `Vary: Accept-Encoding`, returns `{orderUuid, timeline:[{state,timestamp}]}`, 200 with empty array for unknown orders. Closed 2026-07-09.
 
 ---
 
@@ -385,7 +381,7 @@ is extended to checkout).
 **Severity:** MEDIUM (boundary contract)
 **Surface:** `services/order/src/test/java/vn/vnpt/order/OrderPortContractTest.java` (does not exist)
 **Proposed fix:** Write 4 ArchUnit rules: `application.usecase → infrastructure.entity` forbidden, `application.usecase → infrastructure.repository` forbidden, `application.usecase → infrastructure.outbox` forbidden, `noRequestBodyLogger_subclassesAbstractRequestLoggingFilter` deny-list (already covered repo-wide by `util/.../archunit/RequestBodyLoggerDenyListTest.java` from Story 3.3 — only the 3 order-local rules are new).
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 MEDIUM sweep. New `OrderPortContractTest` at `services/order/src/test/java/vn/vnpt/order/OrderPortContractTest.java` covers the 3 order-local rules (entity / repository / outbox forbidden). The `noRequestBodyLogger` deny-list is already covered repo-wide by util's `RequestBodyLoggerDenyListTest` (Story 3.3), so it is intentionally NOT duplicated here.
 
 ---
 

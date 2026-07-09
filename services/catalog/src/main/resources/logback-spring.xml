@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Story 3.3 + Epic 4 MEDIUM sweep / FR-29 / R-15 / ADR-23.
+
+  Defense-in-depth: the R-15 contract says "across all services" must redact PAN-shaped fields.
+  Wires the shared PanRedactingAppender (defined in util/src/main/resources/logback-include.xml)
+  as the root console appender for the catalog service. Mirrors services/payment.
+-->
+<configuration>
+    <include resource="logback-include.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="REDACTING_CONSOLE"/>
+    </root>
+</configuration>

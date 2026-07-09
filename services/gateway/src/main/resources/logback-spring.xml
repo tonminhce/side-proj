@@ -1,28 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  logback-spring.xml — Story 3.4 (gateway).
+  logback-spring.xml — Story 3.4 (gateway) + Epic 4 MEDIUM sweep (deferred-issues.md Story 3.4).
 
-  Re-declares the REDACTING_CONSOLE appender locally rather than including
-  util/.../logback-include.xml, because the gateway does NOT depend on util (Story 3.4 dropped
-  the util dep to avoid Postgres-driver / JPA autoconfig bleed-through). The PanRedactingAppender
-  class is no longer reachable from the gateway's classpath — R-15 log redaction therefore does
-  NOT apply here. That's acceptable for the gateway because:
+  Re-wires the shared PanRedactingAppender (defined in util/src/main/resources/logback-include.xml)
+  as the root console appender for the gateway service. Story 3.4 originally skipped this with
+  a local STDOUT appender because util was not a dep; the Epic 4 sweep re-adds util as a compile
+  dep and switches back to the shared redactor for R-15 "across all services" consistency.
 
-    1. The gateway never sees PAN-shaped fields (it sees X-Card-Bin + X-Card-Last4, hashed to
-       fingerprint before any log line could carry them).
-    2. The gateway's reactive filter chain is the outermost defense in PCI scope minimization;
-       a request-body logger is not enabled (deny-list baseline from Story 3.3).
-
-  ponytail: if a future story needs gateway-side redaction, the cleanest path is to re-add util
-  as a dep OR copy PanRedactingAppender + PanRedactor into the gateway module.
+  Defense-in-depth: the gateway never sees PAN-shaped fields today (only X-Card-Bin + X-Card-Last4,
+  hashed to fingerprint before any log line could carry them), but the redaction is wired so a
+  future story that adds debug logging cannot accidentally regress R-15.
 -->
 <configuration>
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
+    <include resource="logback-include.xml"/>
+
     <root level="INFO">
-        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="REDACTING_CONSOLE"/>
     </root>
 </configuration>
