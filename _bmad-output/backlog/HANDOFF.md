@@ -106,4 +106,33 @@ Items requiring follow-up cycles. **HIGH severity** items should be picked up fi
 - 3 HIGH-severity deferred items (consumer-side HMAC verify, pricing smoke, filter integration tests) should be the first picks next session.
 - 11 backlog stories remain across Epic 6-10 (search, RMA, admin UI, notifications, observability).
 
+## 2026-07-08 retest checkpoint
+
+- Full reactor build is green: `mvn -DskipTests package` passed across 20 reactor modules.
+- Fully green unit/module suites in this sandbox:
+  - `mvn -pl util test` (`69/69`)
+  - `mvn -pl services/gateway test` (`11/11`)
+  - `mvn -pl services/order test` (`39/39`)
+  - `mvn -pl services/customer test` (`18/18`)
+  - `mvn -pl services/auth test` (`12/12`)
+  - `mvn -pl services/pricing test` (`3/3`)
+  - `mvn -pl bff/admin-bff test` (`9/9`)
+- Build-only modules are green: `services/admin`, `services/invoice`, `services/notification`, `services/fulfillment`, `services/returns`, `services/search`, `bff/storefront-bff`.
+- Environment-blocked full suites:
+  - `mvn -pl services/payment test`: `93/94` passed; `WebhookDedupRepositoryTest` blocked by Testcontainers Docker socket (`Operation not permitted`).
+  - `mvn -pl services/catalog -am test`: catalog code tests run, but 11 Testcontainers-backed tests are blocked by Docker socket.
+  - `mvn -pl services/inventory test`: Mockito issue fixed; remaining 24 errors are Testcontainers/Docker blocked.
+  - `mvn -pl services/cart test`: Mockito issue fixed; remaining 5 errors are Testcontainers/Docker blocked.
+  - `mvn -pl services/checkout test`: Mockito/static Stripe blocker fixed; `76/82` passed and remaining 6 errors are Testcontainers/Postgres blocked.
+- Runtime smoke scripts were not rerun in this checkpoint because the sandbox blocks the local process/network setup those scripts depend on.
+- A new sandbox-safe retest lane is now green:
+  - `mvn -pl services/payment -Dtest=StripeWebhookControllerTest test`
+  - `mvn -pl services/gateway -Dtest=RateLimiterLuaScriptTest,BinVelocityLuaScriptTest,RateLimiterGatewayFilterFactoryTest,GatewayPaymentRouteForwardingTest test`
+- Gateway→payment wiring bug was corrected in `services/gateway/src/main/resources/application.yml` by adding `StripPrefix=1` so `/api/payment/webhooks/stripe` can reach payment's `/webhooks/stripe`.
+- Checkout Stripe adapter test no longer depends on `mockStatic(PaymentIntent.class)`; `StripePaymentIntentGateway` now has a small injected creator seam and `StripePaymentIntentGatewayTest` is green (`2/2`) on JDK 26.
+- Added test-scope Mockito `mock-maker-subclass` resources for modules that do not require static mocking: inventory, cart, checkout, admin-bff.
+- New automation entrypoints:
+  - `dev/scripts/retest-payment-gateway.sh`
+  - `dev/scripts/smoke-gateway-payment-connection.sh` (local runtime only)
+
 The pattern is locked in. The next session can resume with `bmad-story-automator` + `/ultracode` + `/ponytail full` and pick up Story 6.1 (per-locale ES index bootstrap, FR-51) or a deferred HIGH item.
