@@ -490,7 +490,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** HIGH (Story 5.6 AC #1 unmet: loyalty should fire on PAID)
 **Surface:** `services/order/.../infrastructure/entity/OrderPriceSnapshot.java` + V001 migration (genesis PLACED path)
 **Proposed fix:** Add `user_id BIGINT` column to V001 + capture userId on order placement. The saga advancer then resolves customerId via a local `user→customer` table or a customer-service HTTP lookup. Drop the `customerId=0` placeholder once the lookup lands.
-**Status:** partially-fixed (saga wired; accrual is a no-op until snapshot.userId lands) — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.10 (Move A). V007 adds `user_id BIGINT NULL` column to order_price_snapshot. OrderPriceSnapshot.userId field. PaymentCapturedOrderAdvancer now resolves customerId from snapshot.userId (v1: userId==customerId via auth's users.customer_id column) and drops the customerId=0L placeholder. Legacy snapshots (userId=null) skip accrual with warning log; PAID transition still appends in both paths. 68/68 order tests green (was 66, +2 saga tests).
 
 ## [Epic 5 closeout] 2026-07-09 — Loyalty race: missing @Version on LoyaltyAccountEntity + accrual endpoint trusts caller (Story 5.6)
 

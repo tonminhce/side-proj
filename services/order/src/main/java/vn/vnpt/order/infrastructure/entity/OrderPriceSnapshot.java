@@ -63,4 +63,10 @@ public class OrderPriceSnapshot {
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "address_json", columnDefinition = "jsonb")
   private String addressJson;
+
+  // Move A — authenticated userId captured at order placement (PLACED transition).
+  // Nullable for legacy snapshots; the saga skips loyalty accrual when null.
+  // In v1, snapshot.userId IS the customerId (auth's users.customer_id == userId).
+  @Column(name = "user_id")
+  private Long userId;
 }

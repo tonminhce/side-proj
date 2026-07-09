@@ -37,10 +37,8 @@ public class PaymentCapturedOrderAdvancer {
   private final OrderHmacEventVerifier verifier;
   private final Counter signatureMismatchCounter;
   private final Counter errorCounter;
-  // Story 5.6 / FR-50 — loyalty accrual on PAID. customerId is unknown in v1 (the snapshot
-  // carries no userId); the accrual call below is a no-op until the OrderPriceSnapshot captures
-  // a userId (deferred per deferred-issues.md). // ponytail: orderUuid-only accrue, swap to
-  // (orderUuid, customerId, totalCents) once snapshot.userId exists.
+  // Story 5.6 / FR-50 — loyalty accrual on PAID. Move A resolves customerId from snapshot.userId
+  // (nullable for legacy snapshots; the saga skips accrual on those with a warning).
   private final AccrueLoyaltyPointsUseCase accrueLoyaltyPointsUseCase;
 
   public PaymentCapturedOrderAdvancer(
@@ -100,19 +98,28 @@ public class PaymentCapturedOrderAdvancer {
       appendUseCase.execute(new AppendOrderTransitionCommand(
           event.orderUuid(), OrderState.PAID, "payment.captured", snapshot));
 
-      // Story 5.6 / FR-50 — accrue loyalty points. v1 has no userId on the snapshot so
-      // customerId is 0 and the use case is a no-op (the accrual endpoint is the v1 entry
-      // point). When snapshot.userId lands, replace 0 with the resolved customerId.
-      try {
-        int accrued = accrueLoyaltyPointsUseCase.execute(event.orderUuid(), 0L, snapshot.getTotalCents());
-        if (accrued == 0) {
-          log.debug("Loyalty accrual skipped for orderUuid={} (no customerId mapping in v1)",
-              event.orderUuid());
+      // Story 5.6 / FR-50 — accrue loyalty points. Move A sources customerId from
+      // snapshot.userId (nullable for legacy snapshots created before V007; saga skips
+      // accrual on those with a warning — the accrual endpoint remains the v1 entry point).
+      Long userId = snapshot.getUserId();
+      if (userId == null) {
+        log.warn("Loyalty accrual skipped for orderUuid={} (legacy snapshot without userId)",
+            event.orderUuid());
+      } else {
+        try {
+          // v1: snapshot.userId IS the customerId (auth's users.customer_id == userId).
+          // Forward-compat: replace with a user→customer cross-service lookup if the key
+          // model diverges.
+          int accrued = accrueLoyaltyPointsUseCase.execute(event.orderUuid(), userId, snapshot.getTotalCents());
+          if (accrued == 0) {
+            log.debug("Loyalty accrual returned 0 points for orderUuid={} (customerId={})",
+                event.orderUuid(), userId);
+          }
+        } catch (RuntimeException loyaltyEx) {
+          // Loyalty is best-effort post-advance; a failure here must NOT roll back the PAID transition.
+          log.warn("Loyalty accrual failed for orderUuid={} (PAID transition preserved): {}",
+              event.orderUuid(), loyaltyEx.getMessage());
         }
-      } catch (RuntimeException loyaltyEx) {
-        // Loyalty is best-effort post-advance; a failure here must NOT roll back the PAID transition.
-        log.warn("Loyalty accrual failed for orderUuid={} (PAID transition preserved): {}",
-            event.orderUuid(), loyaltyEx.getMessage());
       }
     } catch (RuntimeException e) {
       errorCounter.increment();

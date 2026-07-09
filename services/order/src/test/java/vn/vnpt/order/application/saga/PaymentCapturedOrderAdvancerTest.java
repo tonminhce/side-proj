@@ -135,6 +135,59 @@ class PaymentCapturedOrderAdvancerTest {
         .isInstanceOf(OrderSnapshotMissingException.class);
   }
 
+  /** Move A — snapshot.userId present → saga passes it as customerId to accrual. */
+  @Test
+  void onPaymentCaptured_resolvesCustomerIdFromSnapshotUserId() {
+    long orderUuid = 11L;
+    PaymentCapturedEvent event = new PaymentCapturedEvent(
+        orderUuid, "pi_test", 11500L, "USD", LocalDateTime.now());
+    SignedPaymentCapturedEvent signed = signed(event);
+    when(transitionRepo.findFirstByOrderUuidOrderByIdDesc(orderUuid))
+        .thenReturn(Optional.of(OrderStateTransition.builder()
+            .id(1L).orderUuid(orderUuid).fromState(null).toState("PLACED")
+            .sagaStep("order.placed").eventId(100L)
+            .createdAt(LocalDateTime.now()).build()));
+    OrderPriceSnapshot snapshot = OrderPriceSnapshot.builder()
+        .orderUuid(orderUuid).listPriceCents(10000L).taxCents(1000L)
+        .shippingCents(500L).totalCents(11500L).currency("USD")
+        .capturedAt(LocalDateTime.now())
+        .userId(99L)  // Move A — the saga sources customerId from snapshot.userId
+        .build();
+    when(priceRepo.findById(orderUuid)).thenReturn(Optional.of(snapshot));
+
+    advancer.onPaymentCaptured(signed);
+
+    verify(accrueLoyaltyUseCase).execute(orderUuid, 99L, 11500L);
+  }
+
+  /** Move A — legacy snapshot without userId → saga skips accrual (no use-case call). */
+  @Test
+  void onPaymentCaptured_skipsAccrualWhenSnapshotHasNoUserId() {
+    long orderUuid = 11L;
+    PaymentCapturedEvent event = new PaymentCapturedEvent(
+        orderUuid, "pi_test", 11500L, "USD", LocalDateTime.now());
+    SignedPaymentCapturedEvent signed = signed(event);
+    when(transitionRepo.findFirstByOrderUuidOrderByIdDesc(orderUuid))
+        .thenReturn(Optional.of(OrderStateTransition.builder()
+            .id(1L).orderUuid(orderUuid).fromState(null).toState("PLACED")
+            .sagaStep("order.placed").eventId(100L)
+            .createdAt(LocalDateTime.now()).build()));
+    OrderPriceSnapshot legacySnapshot = OrderPriceSnapshot.builder()
+        .orderUuid(orderUuid).listPriceCents(10000L).taxCents(1000L)
+        .shippingCents(500L).totalCents(11500L).currency("USD")
+        .capturedAt(LocalDateTime.now())
+        .userId(null)  // legacy snapshot — pre-V007
+        .build();
+    when(priceRepo.findById(orderUuid)).thenReturn(Optional.of(legacySnapshot));
+
+    advancer.onPaymentCaptured(signed);
+
+    // PAID transition still appended.
+    verify(appendUseCase).execute(any(AppendOrderTransitionCommand.class));
+    // Loyalty accrual SKIPPED — no use-case call.
+    verify(accrueLoyaltyUseCase, never()).execute(anyLong(), anyLong(), anyLong());
+  }
+
   @Test
   void onSignatureMismatch_incrementsCounter() {
     advancer.onSignatureMismatch("evt_123");
