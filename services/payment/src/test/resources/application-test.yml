@@ -39,3 +39,13 @@ management:
 logging:
   level:
     vn.vnpt.payment: INFO
+
+stripe:
+  # Mirrors StripeProperties (mode / apiKey / apiVersion / webhookSigningSecret). The @SpringBootTest
+  # context (e.g. StripeWebhookEndToEndIT) binds this so StripeProperties.mode() etc. are non-null.
+  # Without these keys, the @ConfigurationProperties binding would log a validation warning and the
+  # RealStripePaymentAdapter's @PostConstruct init() would fail on the apiKey null check.
+  mode: test
+  api-key: sk_test_dev_placeholder
+  api-version: "2025-09-30.clover"
+  webhook-signing-secret: whsec_test_payment

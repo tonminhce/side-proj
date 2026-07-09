@@ -22,9 +22,12 @@ import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import vn.vnpt.gateway.infrastructure.config.GatewayBinVelocityProperties;
 
 @ExtendWith(MockitoExtension.class)
 class RateLimiterGatewayFilterFactoryTest {
+
+  private static final String PAYMENT_ATTEMPT_PATH = "/api/payment/test";
 
   @Mock ReactiveRedisTemplate<String, String> redis;
 
@@ -38,7 +41,8 @@ class RateLimiterGatewayFilterFactoryTest {
     rateLimiterScript = new DefaultRedisScript<>();
     binVelocityScript = new DefaultRedisScript<>();
     factory = new RateLimiterGatewayFilterFactory(
-        redis, rateLimiterScript, binVelocityScript, new SimpleMeterRegistry());
+        redis, rateLimiterScript, binVelocityScript, new SimpleMeterRegistry(),
+        new GatewayBinVelocityProperties());
     config = new RateLimiterGatewayFilterFactory.Config();
   }
 
@@ -46,7 +50,7 @@ class RateLimiterGatewayFilterFactoryTest {
   void rejectsRequestWithoutTrustedRealIp() {
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/api/payment/webhooks/stripe").build());
+        MockServerWebExchange.from(MockServerHttpRequest.get(PAYMENT_ATTEMPT_PATH).build());
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
     filter.filter(exchange, chain(exchange, chainCalled)).block();
@@ -64,7 +68,7 @@ class RateLimiterGatewayFilterFactoryTest {
 
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.post("/api/payment/webhooks/stripe")
+        MockServerWebExchange.from(MockServerHttpRequest.post(PAYMENT_ATTEMPT_PATH)
             .header("X-Real-IP", "1.2.3.4")
             .header("X-Card-Bin", "424242")
             .header("X-Card-Last4", "4242")
@@ -85,7 +89,7 @@ class RateLimiterGatewayFilterFactoryTest {
 
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/api/payment/webhooks/stripe")
+        MockServerWebExchange.from(MockServerHttpRequest.get(PAYMENT_ATTEMPT_PATH)
             .header("X-Real-IP", "1.2.3.4")
             .header("X-Card-Bin", "424242")
             .header("X-Card-Last4", "4242")
@@ -106,7 +110,7 @@ class RateLimiterGatewayFilterFactoryTest {
 
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/api/payment/webhooks/stripe")
+        MockServerWebExchange.from(MockServerHttpRequest.get(PAYMENT_ATTEMPT_PATH)
             .header("X-Real-IP", "1.2.3.4")
             .header("X-Card-Bin", "424242")
             .header("X-Card-Last4", "4242")
@@ -128,7 +132,7 @@ class RateLimiterGatewayFilterFactoryTest {
 
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/api/payment/webhooks/stripe")
+        MockServerWebExchange.from(MockServerHttpRequest.get(PAYMENT_ATTEMPT_PATH)
             .header("X-Real-IP", "1.2.3.4")
             .header("X-Card-Bin", "424242")
             .header("X-Card-Last4", "4242")
@@ -152,7 +156,7 @@ class RateLimiterGatewayFilterFactoryTest {
 
     GatewayFilter filter = factory.apply(config);
     MockServerWebExchange exchange =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/api/payment/webhooks/stripe")
+        MockServerWebExchange.from(MockServerHttpRequest.get(PAYMENT_ATTEMPT_PATH)
             .header("X-Forwarded-For", "1.2.3.4")   // spoofable
             .header("X-Card-Bin", "424242")
             .header("X-Card-Last4", "4242")

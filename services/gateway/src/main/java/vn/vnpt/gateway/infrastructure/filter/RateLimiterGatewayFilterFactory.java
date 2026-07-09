@@ -24,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import vn.vnpt.gateway.infrastructure.config.GatewayBinVelocityProperties;
 
 /**
  * RateLimiter + BIN velocity filter — Story 3.4 / FR-81 / R-05 / ADR-13 + ADR-24.
@@ -59,16 +60,19 @@ public class RateLimiterGatewayFilterFactory
   private final Counter binVelocityBlockedCounter;
   private final Counter errorCounter;
   private final AtomicLong lastBinVelocityCount = new AtomicLong(0);
+  private final GatewayBinVelocityProperties binVelocityProperties;
 
   public RateLimiterGatewayFilterFactory(
       ReactiveRedisTemplate<String, String> redis,
       @Qualifier("rateLimiterScript") DefaultRedisScript<List> rateLimiterScript,
       @Qualifier("binVelocityScript") DefaultRedisScript<Long> binVelocityScript,
-      MeterRegistry meterRegistry) {
+      MeterRegistry meterRegistry,
+      GatewayBinVelocityProperties binVelocityProperties) {
     super(Config.class);
     this.redis = redis;
     this.rateLimiterScript = rateLimiterScript;
     this.binVelocityScript = binVelocityScript;
+    this.binVelocityProperties = binVelocityProperties;
     this.allowedCounter = Counter.builder("gateway.ratelimit.allowed")
         .tag("route", "payment").register(meterRegistry);
     this.tokenBucketBlockedCounter = Counter.builder("gateway.ratelimit.blocked")
@@ -86,8 +90,12 @@ public class RateLimiterGatewayFilterFactory
     private double refillPerSec = 10.0;
     private int ttlSec = 60;
     private int cost = 1;
-    private int windowMinutes = 60;
-    private int binVelocityMaxAttempts = 10;
+    // Story 3.4 LOW-3: windowMinutes + binVelocityMaxAttempts now come from
+    // GatewayBinVelocityProperties (gateway.bin-velocity.* in application.yml) so ops can
+    // tune the threshold without editing the route definition. The route-arg overrides
+    // remain supported for per-route tuning.
+    private int windowMinutes = 0;
+    private int binVelocityMaxAttempts = 0;
 
     public int getCapacity() { return capacity; }
     public void setCapacity(int v) { this.capacity = v; }
@@ -101,6 +109,18 @@ public class RateLimiterGatewayFilterFactory
     public void setWindowMinutes(int v) { this.windowMinutes = v; }
     public int getBinVelocityMaxAttempts() { return binVelocityMaxAttempts; }
     public void setBinVelocityMaxAttempts(int v) { this.binVelocityMaxAttempts = v; }
+
+    /** Resolves windowMinutes — route-arg wins; otherwise GatewayBinVelocityProperties. */
+    int effectiveWindowMinutes() {
+      return windowMinutes > 0 ? windowMinutes : binVelocityProperties.getWindowMinutes();
+    }
+
+    /** Resolves binVelocityMaxAttempts — route-arg wins; otherwise GatewayBinVelocityProperties. */
+    int effectiveBinVelocityMaxAttempts() {
+      return binVelocityMaxAttempts > 0
+          ? binVelocityMaxAttempts
+          : binVelocityProperties.getMaxAttempts();
+    }
   }
 
   @Override
@@ -119,7 +139,9 @@ public class RateLimiterGatewayFilterFactory
 
       // BIN velocity check (runs first — cheaper; if exceeded, no need to query the token bucket).
       if (BIN_PATTERN.matcher(bin).matches()) {
-        long windowMs = (long) config.windowMinutes * 60_000L;
+        int effectiveWindow = config.effectiveWindowMinutes();
+        int effectiveMaxAttempts = config.effectiveBinVelocityMaxAttempts();
+        long windowMs = (long) effectiveWindow * 60_000L;
         long nowMs = System.currentTimeMillis();
         long windowStart = (nowMs / windowMs) * windowMs;
         String binKey = "rl:bin:" + bin + ":" + windowStart;
@@ -128,7 +150,7 @@ public class RateLimiterGatewayFilterFactory
             .flatMap(countObj -> {
               long count = ((Number) countObj).longValue();
               lastBinVelocityCount.set(count);
-              if (count > config.binVelocityMaxAttempts) {
+              if (count > effectiveMaxAttempts) {
                 binVelocityBlockedCounter.increment();
                 return shortCircuit(exchange, HttpStatus.TOO_MANY_REQUESTS,
                     "BIN velocity exceeded", (long) (windowMs / 1000));

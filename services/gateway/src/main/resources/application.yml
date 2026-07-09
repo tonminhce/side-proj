@@ -43,19 +43,36 @@ spring:
             locator:
               enabled: false
           routes:
+            - id: payment-webhook
+              uri: http://localhost:8086
+              predicates:
+                - Path=/api/payment/webhooks/**
+              filters:
+                - StripPrefix=2
             - id: payment
               uri: http://localhost:8086
               predicates:
                 - Path=/api/payment/**
               filters:
+                - StripPrefix=1
                 - name: RateLimiter
                   args:
                     capacity: 100
                     refillPerSec: 10
                     ttlSec: 3600
                     cost: 1
-                    windowMinutes: 60
-                    binVelocityMaxAttempts: 10
+                    # windowMinutes + binVelocityMaxAttempts come from the gateway.bin-velocity.*
+                    # config block below (Story 3.4 LOW-3). Per-route overrides remain supported
+                    # via these args if a specific route needs a tighter threshold.
+
+# Story 3.4 LOW-3: BIN-velocity threshold is now a top-level config block (was an inline
+# route-arg). Ops can tune `gateway.bin-velocity.max-attempts` and `window-minutes` per
+# environment without editing the route definition. Bound to GatewayBinVelocityProperties
+# (@ConfigurationProperties) and read by the filter's effective* methods.
+gateway:
+  bin-velocity:
+    max-attempts: 10
+    window-minutes: 60
 
 # FR-29 / R-15 deny-list: /actuator/loggers and /actuator/httptrace stay off.
 management:

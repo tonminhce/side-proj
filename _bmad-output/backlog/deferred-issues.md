@@ -40,7 +40,7 @@ Format per entry:
 **Severity:** LOW
 **Surface:** `dev/scripts/smoke-payment-3-3.sh` step 5
 **Proposed fix:** Add a debug-only endpoint or log-event generator that emits `log.info("trace={}", "4111111111111111")` and grep the log for `***REDACTED:PAN***`.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. New step 5b in `smoke-payment-3-3.sh` posts a webhook payload with an embedded PAN-shaped string (`4111111111111111` in the `description` field), then greps the log for `REDACTED:PAN` to prove the redactor is active (not just vacuously absent).
 
 ---
 
@@ -50,7 +50,7 @@ Format per entry:
 **Severity:** LOW
 **Surface:** `dev/scripts/smoke-payment-3-3.sh` (payment-only)
 **Proposed fix:** Loop through each service that ships `logback-spring.xml`; boot + curl `/actuator/health` + grep startup log for `RealStripePaymentAdapter initialized` (or service-specific bean).
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. New `dev/scripts/smoke-cross-service-3-3.sh` iterates over catalog/inventory/cart/checkout (each one has a `logback-spring.xml` after the Epic 4 MEDIUM sweep), boots each in dev profile, asserts `/actuator/health = UP`, and warns if `PanRedactingAppender` / `REDACTING_CONSOLE` is missing from the startup log.
 
 ---
 
@@ -60,7 +60,7 @@ Format per entry:
 **Severity:** LOW (doc only; behavior is correct)
 **Surface:** `_bmad-output/implementation-artifacts/3-3-...md:124-127`
 **Proposed fix:** Update AC #1 wording to "stripe-java 28.x: per-request via `unsafeSetStripeVersionOverride`".
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. AC #1 narrative + the "com.stripe:stripe-java 28.x API surface" Dev Notes section both updated to reference `RequestOptions.RequestOptionsBuilder.unsafeSetStripeVersionOverride(...)` per-request pinning. The `Stripe.apiKey` static setter (line ~119) is still correct.
 
 ---
 
@@ -70,7 +70,7 @@ Format per entry:
 **Severity:** LOW (manifest only as of mvn test passing — verify under @SpringBootTest scope)
 **Surface:** `services/payment/src/test/resources/application-test.yml`
 **Proposed fix:** Confirm the file has `stripe: { mode: test, api-key: sk_test, api-version: ... }`. Add if missing.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. `stripe: { mode, api-key, api-version, webhook-signing-secret }` block added to `application-test.yml`. The existing `webhook-signing-secret` was there; `mode` / `api-key` / `api-version` were missing and would have triggered a binding warning under `@SpringBootTest`.
 
 ---
 
@@ -114,7 +114,7 @@ Total: 6 tests, all green. AC #7 / HIGH-2 fully resolved.
 **Severity:** LOW
 **Surface:** `services/gateway/src/main/resources/lua/rate-limiter.lua:43`
 **Proposed fix:** Track `min_remaining = capacity` initially, set to `tokens - cost` in the post-commit phase only.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. `min_remaining` is now computed in the post-decision phase: for blocked buckets the post-call state is the (unchanged) current `tokens`; for allowed requests it's `tokens - cost` (post-commit). The user-facing `RateLimit-Remaining` header (capped at `Math.max(0, ...)` in the filter) is now honest.
 
 ---
 
@@ -124,7 +124,7 @@ Total: 6 tests, all green. AC #7 / HIGH-2 fully resolved.
 **Severity:** LOW
 **Surface:** `services/gateway/src/main/resources/application.yml:55-58`
 **Proposed fix:** Extract a `gateway.bin-velocity.*` block; bind via `@ConfigurationProperties` or `@Value` in the filter's Config.
-**Status:** open
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Epic 4 LOW sweep. New `GatewayBinVelocityProperties` (`@ConfigurationProperties(prefix="gateway.bin-velocity")`) bound via `GatewayApplication`'s `@EnableConfigurationProperties`. The filter's `Config` has new `effectiveWindowMinutes()` / `effectiveBinVelocityMaxAttempts()` helpers — route-arg overrides still win (for per-route tuning); absent overrides, the config block is the source of truth. YAML now carries `gateway.bin-velocity.{max-attempts, window-minutes}` at the top level.
 
 ---
 

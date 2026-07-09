@@ -3,6 +3,8 @@ package vn.vnpt.gateway;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import vn.vnpt.gateway.infrastructure.config.GatewayBinVelocityProperties;
 
 /**
  * Gateway — Story 3.4 / FR-81 / R-05 / ADR-13 + ADR-24. Reactive Spring Cloud Gateway filter
@@ -22,6 +24,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
     "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration",
     "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration"
 })
+@EnableConfigurationProperties(GatewayBinVelocityProperties.class)
 public class GatewayApplication {
 
   public static void main(String[] args) {

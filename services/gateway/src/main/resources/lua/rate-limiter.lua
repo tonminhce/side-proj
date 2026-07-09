@@ -40,7 +40,6 @@ for i = 1, n do
   if tokens < cost and blocked_idx == 0 then
     blocked_idx = i
   end
-  if tokens < min_remaining then min_remaining = tokens end
 end
 
 local allowed     = 1
@@ -54,13 +53,28 @@ if blocked_idx > 0 then
   else
     retry_after = 60
   end
+  -- For a blocked bucket, the post-call state is "still 0 remaining" (the request was rejected
+  -- and no tokens were consumed). For the other (non-blocking) buckets, the post-call state
+  -- is tokens - cost. The honest min_remaining therefore comes from the blocking bucket's
+  -- current tokens (the user-visible "how long until I can retry" signal) when the request
+  -- is blocked, and from the post-commit (tokens - cost) when allowed. Story 3.4 LOW-2
+  -- honesty fix: report the un-rounded current tokens for the blocking bucket and the
+  -- post-commit (tokens - cost) for the rest, so the user-facing RateLimit-Remaining header
+  -- (which the filter caps at Math.max(0, remaining)) reflects the actual reservation.
+  for i = 1, n do
+    local post = states[i].tokens - (allowed * cost)
+    if i == blocked_idx then post = states[i].tokens end
+    if post < min_remaining then min_remaining = post end
+  end
 else
   -- Phase 2: commit consumption on every bucket
   for i = 1, n do
     states[i].tokens = states[i].tokens - cost
     redis.call('HMSET', KEYS[i], 'tokens', states[i].tokens, 'last', now_ms)
     redis.call('EXPIRE', KEYS[i], ttl)
+    local post = states[i].tokens
+    if post < min_remaining then min_remaining = post end
   end
 end
 
-return { allowed, math.floor(min_remaining - (allowed * cost)), retry_after, blocked_idx }
+return { allowed, math.floor(min_remaining), retry_after, blocked_idx }
