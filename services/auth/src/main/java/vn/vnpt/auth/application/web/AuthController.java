@@ -16,9 +16,19 @@ import vn.vnpt.auth.application.usecase.IssueServiceTokenUseCase;
 import vn.vnpt.auth.application.usecase.LoginUseCase;
 import vn.vnpt.auth.application.usecase.RegisterUseCase;
 
+/** Auth endpoints — Epic 5 follow-up / FR-73, FR-74, FR-75, FR-76.
+ *  Email-enumeration hardening: register + login return identical status + body
+ *  for the "no such user / wrong password / duplicate email" cases so a caller
+ *  cannot probe which emails are registered. The detail error codes are still
+ *  emitted internally to AuthResult for ops/audit logging but never leak in
+ *  the HTTP response. */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+  private static final String GENERIC_INVALID = "invalid_credentials";
+  private static final String GENERIC_OK_REGISTER = "registration_submitted";
+  private static final Map<String, Object> INVALID_BODY = Map.of("error", GENERIC_INVALID);
 
   private final RegisterUseCase registerUseCase;
   private final LoginUseCase loginUseCase;
@@ -33,29 +43,23 @@ public class AuthController {
 
   @PostMapping("/register")
   public ResponseEntity<Map<String, Object>> register(@RequestBody RegisterCommand cmd) {
-    AuthResult result = registerUseCase.execute(cmd);
-    if (result.error() != null) {
-      return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", result.error()));
-    }
-    return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-        "userId", result.userId(),
-        "email", result.email(),
-        "role", result.role().name(),
-        "mfaRequired", result.mfaRequired(),
-        "sessionToken", result.sessionToken(),
-        "captchaRequired", result.captchaRequired()));
+    // Always returns 200 with a generic body. The use case still creates the user if
+    // the email is free; if it's a duplicate, no user row is created and no
+    // distinguishing signal leaks. The real password-verification flow happens at login.
+    registerUseCase.execute(cmd);
+    return ResponseEntity.ok(Map.of(
+        "status", GENERIC_OK_REGISTER,
+        "message", "If this email is new, a verification link has been sent."));
   }
 
   @PostMapping("/login")
   public ResponseEntity<Map<String, Object>> login(@RequestBody LoginCommand cmd) {
     AuthResult result = loginUseCase.execute(cmd);
-    if ("invalid_credentials".equals(result.error())) {
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", result.error()));
-    }
-    if (result.error() != null && result.error().startsWith("account_locked")) {
-      return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of(
-          "error", "account_locked",
-          "userId", result.userId()));
+    if (result.error() != null) {
+      // All failure modes — invalid_credentials, account_locked, or any future
+      // error code — collapse to the same 401 + identical body. Login-account
+      // lockout is reported via Micrometer counter + ops log instead.
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(INVALID_BODY);
     }
     return ResponseEntity.ok(Map.of(
         "userId", result.userId(),
@@ -66,7 +70,8 @@ public class AuthController {
         "captchaRequired", result.captchaRequired()));
   }
 
-  /** Story 5.5 / FR-74 — service-account JWT. */
+  /** Story 5.5 / FR-74 — service-account JWT. Gated upstream by InternalTokenAuthFilter
+   *  (X-Internal-Token header) — see AuthSecurityConfig. */
   @PostMapping("/service-token")
   public ResponseEntity<Map<String, Object>> serviceToken(@RequestBody ServiceTokenCommand cmd) {
     ServiceTokenResult result = issueServiceTokenUseCase.execute(cmd);

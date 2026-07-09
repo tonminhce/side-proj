@@ -458,7 +458,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** HIGH (security — anonymous caller can mint a service-account JWT with arbitrary allowedRoles)
 **Surface:** `services/auth/.../infrastructure/web/AuthSecurityConfig.java:14-27`
 **Proposed fix:** Either (a) delete the config entirely and let Spring Security reject unauthenticated requests, then permit `/api/auth/register + /api/auth/login` only; or (b) keep it but protect `/api/auth/service-token` with mTLS or an `X-Internal-Token` header validated against Vault.
-**Status:** open — Epic 5 closure (flagged HIGH for the next auth follow-up story)
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.8. `InternalTokenAuthFilter` registered at `Ordered.HIGHEST_PRECEDENCE` via `FilterRegistrationBean` runs BEFORE Spring Security's denyAll chain. Validates `X-Internal-Token` header against `AUTH_INTERNAL_TOKEN` env (dev fallback `dev-internal-token-do-not-use-in-prod`, prod fails loud). AuthSecurityConfig narrowed to permitAll on register+login+actuator only. 6 InternalTokenAuthFilterTest cases green.
 
 ## [Epic 5 closeout] 2026-07-09 — JWT verifier bean absent (Story 5.4 / 5.5)
 
@@ -466,7 +466,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** HIGH (no enforcement today; the only thing preventing forgery is HMAC_JWT_SECRET secrecy)
 **Surface:** `services/auth/.../infrastructure/security/JwtIssuer.java` (missing pair)
 **Proposed fix:** Add a `JwtVerifier` bean (HMAC + `iss` + `exp` checks) parallel to `JwtIssuer`. Consumers across services should inject it for `@PreAuthorize`-style gating.
-**Status:** open — Epic 5 closure (flagged HIGH)
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.8. `JwtVerifier` bean (HMAC via `HmacEventSigner.verify`, `iss=auth`, `exp > now(clock)`). 5 JwtVerifierTest cases green. Test-seam constructor for unit-test shared-secret injection.
 
 ## [Epic 5 closeout] 2026-07-09 — Email enumeration via 401/423/409 differentiation (Story 5.4)
 
@@ -474,7 +474,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** MEDIUM (defense in depth)
 **Surface:** `services/auth/.../application/web/AuthController.java:34-67`
 **Proposed fix:** Return identical status + body for unknown-email vs bad-password login; same for register (always return 200 with a generic "check your email" message).
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.8. AuthController.register always returns 200 + `{status:"registration_submitted", message:"..."}`. AuthController.login collapses unknown-email + bad-password + account-locked into identical 401 + `{error:"invalid_credentials"}`. Account-lock detail still recorded via Micrometer `security.account.locked` counter for ops visibility. 5 AuthControllerTest cases green.
 
 ## [Epic 5 closeout] 2026-07-09 — `users.role` default `'user'` vs enum `USER` case mismatch (Story 5.4)
 
@@ -482,7 +482,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** MEDIUM (latent — Hibernate path always writes 'USER'; direct SQL is the exposure)
 **Surface:** `services/auth/src/main/resources/db/migration/auth/V001__create_users_table.sql:10`
 **Proposed fix:** Add `CHECK (role IN ('USER','STAFF','ADMIN'))` to the table; drop the `'user'` default (any non-JPA write must specify role explicitly).
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.8. V002 migration: `ALTER TABLE users ALTER COLUMN role DROP DEFAULT; ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('USER','STAFF','ADMIN'));`. Belt-and-braces with the `@Enumerated(EnumType.STRING)` enum.
 
 ## [Epic 5 closeout] 2026-07-09 — OrderPriceSnapshot has no userId column (Story 5.6)
 

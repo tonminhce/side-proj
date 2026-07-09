@@ -35,6 +35,14 @@ public class JwtIssuer {
     this.activeProfile = activeProfile;
   }
 
+  /** Test seam — inject the secret directly (mirrors the @PostConstruct resolution
+   *  but skips the env lookup so unit tests don't have to set HMAC_JWT_SECRET). */
+  JwtIssuer(ObjectMapper objectMapper, String activeProfile, String secretForTest) {
+    this.objectMapper = objectMapper;
+    this.activeProfile = activeProfile;
+    this.secret = secretForTest;
+  }
+
   @PostConstruct
   public void init() {
     String env = System.getenv("HMAC_JWT_SECRET");
