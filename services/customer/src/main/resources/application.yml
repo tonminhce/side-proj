@@ -5,9 +5,6 @@ spring:
   application:
     name: customer
 
-  main:
-    allow-bean-definition-overriding: true
-
   autoconfigure:
     exclude:
       - vn.vnpt.util.UtilsAutoConfiguration
@@ -44,23 +41,3 @@ management:
 logging:
   level:
     vn.vnpt.customer: INFO
-
-folder:
-  folderTemp: /tmp/customer/tmp
-file:
-  end-point: http://localhost:9000
-  access-key: minio
-  secret-key: minio123
-  bucket-name: customer-files
-telegram:
-  error-bot-token: dev-placeholder
-  error-group-chat-id: "0"
-  is-send-error: false
-
-tenants:
-  datasources:
-    default:
-      jdbcUrl: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_CUSTOMER_DB:customer_db}
-      driverClassName: org.postgresql.Driver
-      username: ${POSTGRES_CUSTOMER_USER:customer_user}
-      password: ${POSTGRES_CUSTOMER_PASSWORD:customer_pass}

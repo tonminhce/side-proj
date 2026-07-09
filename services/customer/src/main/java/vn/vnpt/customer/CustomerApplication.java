@@ -2,8 +2,7 @@ package vn.vnpt.customer;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Import;
-import vn.vnpt.util.events.ModulithOutboxPublisher;
+import org.springframework.modulith.ApplicationModule;
 
 /**
  * CustomerService — Story 5.1 / FR-45, FR-47. Owns the Customer aggregate + the Address book.
@@ -12,7 +11,7 @@ import vn.vnpt.util.events.ModulithOutboxPublisher;
  * from Customer in this story; saga integration lands with Story 5.x).
  */
 @SpringBootApplication(scanBasePackages = "vn.vnpt.customer")
-@Import(ModulithOutboxPublisher.ModulithBridgeSupport.class)
+@ApplicationModule(displayName = "customer")
 public class CustomerApplication {
 
   public static void main(String[] args) {

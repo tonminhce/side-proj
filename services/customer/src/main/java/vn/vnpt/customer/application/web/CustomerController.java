@@ -24,7 +24,6 @@ import vn.vnpt.customer.application.usecase.ExportCustomerDataUseCase;
 import vn.vnpt.customer.application.usecase.ForgetCustomerUseCase;
 import vn.vnpt.customer.application.usecase.GetCustomerWithAddressesUseCase;
 import vn.vnpt.customer.domain.Customer;
-import vn.vnpt.customer.infrastructure.entity.AddressEntity;
 
 /**
  * Customer REST controller — Story 5.1 + 5.2 + 5.3. Endpoints:
@@ -82,7 +81,7 @@ public class CustomerController {
         "displayName", c.displayName(),
         "email", c.email() == null ? "" : c.email(),
         "phone", c.phone() == null ? "" : c.phone(),
-        "addresses", c.addresses().stream().map(this::addressJson).toList()));
+        "addresses", c.addresses().stream().map(AddressDto::fromEntity).toList()));
   }
 
   @PostMapping("/{id}/addresses")
@@ -98,9 +97,9 @@ public class CustomerController {
   }
 
   @GetMapping("/{id}/addresses")
-  public List<Map<String, Object>> listAddresses(@PathVariable long id) {
+  public List<AddressDto> listAddresses(@PathVariable long id) {
     Customer c = getUseCase.execute(id);
-    return c.addresses().stream().map(this::addressJson).toList();
+    return c.addresses().stream().map(AddressDto::fromEntity).toList();
   }
 
   /** Story 5.2 / FR-46 — PDPD data export. */
@@ -138,14 +137,4 @@ public class CustomerController {
 
   public record AddAddressRequest(
       String line1, String provinceCode, String districtCode, String communeCode, boolean isDefault) {}
-
-  private Map<String, Object> addressJson(AddressEntity a) {
-    return Map.of(
-        "id", a.getId(),
-        "line1", a.getLine1(),
-        "provinceCode", a.getProvinceCode(),
-        "districtCode", a.getDistrictCode(),
-        "communeCode", a.getCommuneCode(),
-        "isDefault", a.isDefault());
-  }
 }

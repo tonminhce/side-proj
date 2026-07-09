@@ -33,7 +33,7 @@ class RegisterUseCaseTest {
   void setUp() {
     repo = Mockito.mock(UserRepository.class);
     hasher = Mockito.mock(PasswordHasher.class);
-    jwt = new JwtIssuer(new ObjectMapper());
+    jwt = new JwtIssuer(new ObjectMapper(), "dev");
     jwt.init();
     useCase = new RegisterUseCase(repo, hasher, jwt);
     when(repo.findByEmail("a@x.vn")).thenReturn(Optional.empty());

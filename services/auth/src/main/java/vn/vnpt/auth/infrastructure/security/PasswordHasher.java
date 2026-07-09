@@ -7,11 +7,12 @@ import javax.crypto.spec.PBEKeySpec;
 import org.springframework.stereotype.Component;
 
 /** PBKDF2 password hasher — Story 5.4 / FR-73. Format: {@code <iterations>:<saltB64>:<hashB64>}.
- *  65536 iterations + 16-byte random salt. Future story swaps to Argon2id. */
+ *  600_000 iterations + 16-byte random salt per OWASP 2024 password-storage cheat sheet
+ *  (PBKDF2-HMAC-SHA256 minimum). Future story swaps to Argon2id. */
 @Component
 public class PasswordHasher {
 
-  private static final int ITERATIONS = 65536;
+  private static final int ITERATIONS = 600_000;
   private static final int SALT_BYTES = 16;
   private static final int HASH_BITS = 256;
   private static final String ALGO = "PBKDF2WithHmacSHA256";

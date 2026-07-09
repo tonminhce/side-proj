@@ -140,7 +140,7 @@ class PaymentEventKafkaListenerTest {
     String json = mapper.writeValueAsString(env);
 
     org.mockito.Mockito.doThrow(new IllegalStateException("downstream rollback"))
-        .when(publisher).publishEvent(org.mockito.ArgumentMatchers.any());
+        .when(publisher).publishEvent(org.mockito.ArgumentMatchers.<Object>any());
 
     org.junit.jupiter.api.Assertions.assertThrows(
         IllegalStateException.class,

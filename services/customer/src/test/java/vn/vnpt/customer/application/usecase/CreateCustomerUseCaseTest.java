@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 
+import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import vn.vnpt.customer.application.port.CreateCustomerCommand;
@@ -13,6 +14,8 @@ import vn.vnpt.customer.infrastructure.repository.CustomerRepository;
 
 class CreateCustomerUseCaseTest {
 
+  private static final Clock CLOCK = Clock.systemUTC();
+
   @Test
   void execute_persistsCustomerWithGeneratedId() {
     CustomerRepository repo = Mockito.mock(CustomerRepository.class);
@@ -21,7 +24,7 @@ class CreateCustomerUseCaseTest {
       if (e.getId() == null) e.setId(1L);
       return e;
     });
-    CreateCustomerUseCase useCase = new CreateCustomerUseCase(repo);
+    CreateCustomerUseCase useCase = new CreateCustomerUseCase(repo, CLOCK);
 
     Customer result = useCase.execute(new CreateCustomerCommand(99L, "Nguyen Van A", "a@x.vn", "0901"));
 

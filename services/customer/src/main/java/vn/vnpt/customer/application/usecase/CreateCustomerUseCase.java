@@ -1,6 +1,8 @@
 package vn.vnpt.customer.application.usecase;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.vnpt.customer.application.port.CreateCustomerCommand;
@@ -18,9 +20,11 @@ import vn.vnpt.customer.infrastructure.repository.CustomerRepository;
 public class CreateCustomerUseCase {
 
   private final CustomerRepository customerRepository;
+  private final Clock clock;
 
-  public CreateCustomerUseCase(CustomerRepository customerRepository) {
+  public CreateCustomerUseCase(CustomerRepository customerRepository, Clock clock) {
     this.customerRepository = customerRepository;
+    this.clock = clock;
   }
 
   public Customer execute(CreateCustomerCommand cmd) {
@@ -29,10 +33,10 @@ public class CreateCustomerUseCase {
         .displayName(cmd.displayName())
         .email(cmd.email())
         .phone(cmd.phone())
-        .createdAt(LocalDateTime.now())
+        .createdAt(LocalDateTime.now(clock))
         .build();
     CustomerEntity saved = customerRepository.save(entity);
     return new Customer(saved.getId(), saved.getUserId(), saved.getDisplayName(),
-        saved.getEmail(), saved.getPhone(), java.util.List.of());
+        saved.getEmail(), saved.getPhone(), List.of());
   }
 }

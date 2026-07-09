@@ -34,7 +34,7 @@ class LoginUseCaseTest {
   void setUp() {
     repo = Mockito.mock(UserRepository.class);
     hasher = Mockito.mock(PasswordHasher.class);
-    jwt = new JwtIssuer(new ObjectMapper());
+    jwt = new JwtIssuer(new ObjectMapper(), "dev");
     jwt.init();
     fixedClock = Clock.fixed(Instant.parse("2026-07-08T03:00:00Z"), ZoneOffset.UTC);
     useCase = new LoginUseCase(repo, hasher, jwt, fixedClock, new SimpleMeterRegistry());

@@ -37,10 +37,14 @@ public class ForgetCustomerUseCase {
         .orElseThrow(() -> new IllegalArgumentException("Customer not found: id=" + customerId));
     Instant now = Instant.now(clock);
     customerRepository.delete(customer);
+    // Audit row: the customer_data_registry table stores schema + a JSON payload; for the
+    // forget_audit row the columns JSONB carries the actual values (customer_id, forgotten_at).
+    // The schema is also declared for downstream consumers that introspect the registry.
     registryRepository.save(CustomerDataRegistryEntity.builder()
         .serviceName("customer_service")
         .tableName("forget_audit")
-        .columns("[\"customer_id\",\"forgotten_at\"]")
+        .columns(String.format("{\"customer_id\":%d,\"forgotten_at\":\"%s\"}",
+            customerId, now.toString()))
         .format("json")
         .createdAt(LocalDateTime.now(clock))
         .build());

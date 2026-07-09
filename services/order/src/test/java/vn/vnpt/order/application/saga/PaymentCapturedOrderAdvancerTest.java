@@ -2,6 +2,7 @@ package vn.vnpt.order.application.saga;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import vn.vnpt.order.application.port.AppendOrderTransitionCommand;
 import vn.vnpt.order.application.saga.event.PaymentCapturedEvent;
+import vn.vnpt.order.application.saga.event.SignedPaymentCapturedEvent;
+import vn.vnpt.order.application.usecase.AccrueLoyaltyPointsUseCase;
 import vn.vnpt.order.application.usecase.AppendOrderTransitionUseCase;
 import vn.vnpt.order.domain.OrderState;
 import vn.vnpt.order.domain.exception.OrderSnapshotMissingException;
@@ -33,6 +36,7 @@ class PaymentCapturedOrderAdvancerTest {
   private OrderPriceSnapshotRepository priceRepo;
   private AppendOrderTransitionUseCase appendUseCase;
   private OrderHmacEventVerifier verifier;
+  private AccrueLoyaltyPointsUseCase accrueLoyaltyUseCase;
   private MeterRegistry meterRegistry;
   private PaymentCapturedOrderAdvancer advancer;
 
@@ -42,17 +46,21 @@ class PaymentCapturedOrderAdvancerTest {
     priceRepo = Mockito.mock(OrderPriceSnapshotRepository.class);
     appendUseCase = Mockito.mock(AppendOrderTransitionUseCase.class);
     verifier = Mockito.mock(OrderHmacEventVerifier.class);
+    accrueLoyaltyUseCase = Mockito.mock(AccrueLoyaltyPointsUseCase.class);
     meterRegistry = new SimpleMeterRegistry();
     advancer = new PaymentCapturedOrderAdvancer(
-        transitionRepo, priceRepo, appendUseCase, verifier, meterRegistry);
-    when(verifier.verify(any(), any())).thenReturn(true);
+        transitionRepo, priceRepo, appendUseCase, verifier, accrueLoyaltyUseCase, meterRegistry);
+    when(verifier.verifyPaymentEventEnvelope(anyLong(), any(), any(), anyLong(), any(), any()))
+        .thenReturn(true);
+    when(accrueLoyaltyUseCase.execute(anyLong(), anyLong(), anyLong())).thenReturn(0);
   }
 
   @Test
-  void onPaymentCaptured_appendsPaidTransition() {
+  void onPaymentCaptured_appendsPaidTransitionForValidSignedEnvelope() {
     long orderUuid = 11L;
     PaymentCapturedEvent event = new PaymentCapturedEvent(
         orderUuid, "pi_test", 11500L, "USD", LocalDateTime.now());
+    SignedPaymentCapturedEvent signed = signed(event);
     when(transitionRepo.findFirstByOrderUuidOrderByIdDesc(orderUuid))
         .thenReturn(Optional.of(OrderStateTransition.builder()
             .id(1L).orderUuid(orderUuid).fromState(null).toState("PLACED")
@@ -64,9 +72,24 @@ class PaymentCapturedOrderAdvancerTest {
         .capturedAt(LocalDateTime.now()).build();
     when(priceRepo.findById(orderUuid)).thenReturn(Optional.of(snapshot));
 
+    advancer.onPaymentCaptured(signed);
+
+    verify(verifier).verifyPaymentEventEnvelope(
+        signed.eventId(), "payment.captured", signed.aggregateType(), signed.aggregateId(),
+        signed.payloadJson(), signed.signatures());
+    verify(appendUseCase).execute(any(AppendOrderTransitionCommand.class));
+  }
+
+  @Test
+  void onPaymentCaptured_skipsUnsignedBareEvent() {
+    PaymentCapturedEvent event = new PaymentCapturedEvent(
+        99L, "pi_test", 11500L, "USD", LocalDateTime.now());
+
     advancer.onPaymentCaptured(event);
 
-    verify(appendUseCase).execute(any(AppendOrderTransitionCommand.class));
+    assertThat(meterRegistry.counter("security.event.signature.mismatch",
+        "producer", "payment").count()).isEqualTo(1.0);
+    verify(appendUseCase, never()).execute(any());
   }
 
   @Test
@@ -75,8 +98,24 @@ class PaymentCapturedOrderAdvancerTest {
         99L, "pi_test", 11500L, "USD", LocalDateTime.now());
     when(transitionRepo.findFirstByOrderUuidOrderByIdDesc(99L)).thenReturn(Optional.empty());
 
-    advancer.onPaymentCaptured(event);
+    advancer.onPaymentCaptured(signed(event));
 
+    verify(appendUseCase, never()).execute(any());
+  }
+
+  @Test
+  void onPaymentCaptured_skipsWhenSignatureInvalid() {
+    PaymentCapturedEvent event = new PaymentCapturedEvent(
+        99L, "pi_test", 11500L, "USD", LocalDateTime.now());
+    SignedPaymentCapturedEvent signed = signed(event);
+    when(verifier.verifyPaymentEventEnvelope(
+        signed.eventId(), "payment.captured", signed.aggregateType(), signed.aggregateId(),
+        signed.payloadJson(), signed.signatures())).thenReturn(false);
+
+    advancer.onPaymentCaptured(signed);
+
+    assertThat(meterRegistry.counter("security.event.signature.mismatch",
+        "producer", "payment").count()).isEqualTo(1.0);
     verify(appendUseCase, never()).execute(any());
   }
 
@@ -92,7 +131,7 @@ class PaymentCapturedOrderAdvancerTest {
             .createdAt(LocalDateTime.now()).build()));
     when(priceRepo.findById(orderUuid)).thenReturn(Optional.empty());
 
-    org.assertj.core.api.Assertions.assertThatThrownBy(() -> advancer.onPaymentCaptured(event))
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> advancer.onPaymentCaptured(signed(event)))
         .isInstanceOf(OrderSnapshotMissingException.class);
   }
 
@@ -101,5 +140,15 @@ class PaymentCapturedOrderAdvancerTest {
     advancer.onSignatureMismatch("evt_123");
     assertThat(meterRegistry.counter("security.event.signature.mismatch",
         "producer", "payment").count()).isEqualTo(1.0);
+  }
+
+  private static SignedPaymentCapturedEvent signed(PaymentCapturedEvent event) {
+    return new SignedPaymentCapturedEvent(
+        7001L,
+        "Payment",
+        123456L,
+        "{\"orderUuid\":" + event.orderUuid() + "}",
+        java.util.Map.of("service", "payment", "hmac_sha256", "sig", "key_id", "v1"),
+        event);
   }
 }

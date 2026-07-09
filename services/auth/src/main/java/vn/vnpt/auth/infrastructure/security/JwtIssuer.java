@@ -9,22 +9,30 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import vn.vnpt.util.events.HmacEventSigner;
 import vn.vnpt.util.events.JcsCanonicalJson;
 
-/** JWT issuer — Story 5.4 / FR-73. HS256 with HMAC payload via util's HmacEventSigner. */
+/** JWT issuer — Story 5.4 / FR-73. HS256 with HMAC payload via util's HmacEventSigner.
+ *  Reads the signing key from {@code HMAC_JWT_SECRET}; in the dev profile only, falls back
+ *  to a 32-byte random hex (NEVER logged). Non-dev profiles fail loud on missing key. */
 @Component
 public class JwtIssuer {
 
   private static final Logger log = LoggerFactory.getLogger(JwtIssuer.class);
   private static final long TTL_SECONDS = 3600;
+  private static final String ISSUER = "auth";
 
   private final ObjectMapper objectMapper;
+  private final String activeProfile;
   private volatile String secret;
 
-  public JwtIssuer(ObjectMapper objectMapper) {
+  public JwtIssuer(ObjectMapper objectMapper,
+                   @Value("${spring.profiles.active:prod}") String activeProfile) {
     this.objectMapper = objectMapper;
+    this.activeProfile = activeProfile;
   }
 
   @PostConstruct
@@ -32,13 +40,18 @@ public class JwtIssuer {
     String env = System.getenv("HMAC_JWT_SECRET");
     if (env != null && !env.isBlank()) {
       this.secret = env;
-    } else {
-      // Dev fallback — never use in prod.
+      return;
+    }
+    if ("dev".equalsIgnoreCase(activeProfile)) {
       byte[] random = new byte[32];
       new java.security.SecureRandom().nextBytes(random);
       this.secret = java.util.HexFormat.of().formatHex(random);
-      log.warn("JwtIssuer generated random JWT secret (dev only, never use in prod): {}", this.secret);
+      log.warn("JwtIssuer dev-mode: generated ephemeral HMAC secret (regenerated on every restart,"
+          + " never use in prod, never log the secret value)");
+      return;
     }
+    throw new IllegalStateException("HMAC_JWT_SECRET env var is required in non-dev profiles —"
+        + " auth refuses to start without a signing key (ADR-20 fail-loud).");
   }
 
   public String issue(long userId, String email, String role) {
@@ -47,6 +60,7 @@ public class JwtIssuer {
     header.put("alg", "HS256");
     header.put("typ", "JWT");
     Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("iss", ISSUER);
     payload.put("sub", userId);
     payload.put("email", email);
     payload.put("role", role);
@@ -64,6 +78,7 @@ public class JwtIssuer {
     header.put("alg", "HS256");
     header.put("typ", "JWT");
     Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("iss", ISSUER);
     payload.put("sub", "svc:" + serviceAccountId);
     payload.put("role", allowedRoles == null || allowedRoles.isEmpty() ? "USER" : allowedRoles.get(0));
     payload.put("serviceAccountId", serviceAccountId);

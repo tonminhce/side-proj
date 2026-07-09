@@ -409,3 +409,136 @@ DataSourceHealthContributor autoconfigs were still firing. Fix:
 
 Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 `/actuator/loggers` 404, variant-1 returns 200 + VND, variant-unknown 404).
+
+---
+
+## [Epic 5 closeout] 2026-07-09 — Customer module domain-layer leakage (Story 5.1)
+
+**Blocker:** Customer domain record imports JPA entity.
+**Severity:** MEDIUM (F1 deep-review rule violation; not a runtime bug today)
+**Surface:** `services/customer/.../domain/Customer.java:13` (`List<AddressEntity> addresses`)
+**Proposed fix:** Introduce a `domain/Address` record (mirror of `Customer`) and map `CustomerEntity → Customer` (with `AddressEntity → Address`) at the use-case boundary. Use cases return domain records; controllers map domain → DTOs. This is the lazy version of the full port-seam refactor (see "OrderPortContractTest" entry below).
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — VnAddressCatalog in domain layer (Story 5.3)
+
+**Blocker:** Domain layer should not depend on Jackson + Spring ClassPathResource + filesystem.
+**Severity:** MEDIUM (F1 deep-review rule; the filesystem fallback silently swallows IOException so a misconfigured resource bundle makes the catalog appear empty — see also next entry)
+**Surface:** `services/customer/.../domain/VnAddressCatalog.java:24-65`
+**Proposed fix:** Move to `infrastructure/catalog/VnAddressCatalog` (or `infrastructure/repository/`); introduce `domain/AddressCatalog` interface that the infrastructure impl satisfies. Lazy: just relocate the class.
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — VnAddressCatalog filesystem fallback swallows IOException (Story 5.3)
+
+**Blocker:** Same as above — debug-only filesystem path, silently returns [] on failure.
+**Severity:** MEDIUM (production-affecting when seed/vn-addresses.json is missing from packaged jar)
+**Surface:** `services/customer/.../domain/VnAddressCatalog.java:51-64`
+**Proposed fix:** Delete the filesystem fallback block. Fail-fast on missing classpath resource at startup (throw, not log+continue).
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — `domain/Customer` record leaks to controller via listAddresses return type (Story 5.1)
+
+**Blocker:** Depends on the domain-layer fix above.
+**Severity:** LOW (works today because AddressEntity has @JsonIgnore on lazy customer; but the controller return type is wrong)
+**Surface:** `services/customer/.../application/web/CustomerController.java:101`
+**Proposed fix:** After introducing domain/Address, change `listAddresses` to return `List<AddressDto>` (already done in this cycle) and ensure the use-case returns domain addresses.
+**Status:** partially-fixed — `listAddresses` now returns `List<AddressDto>`. The deeper domain/Address record work is open.
+
+## [Epic 5 closeout] 2026-07-09 — PasswordHasher should live in util/ (Story 5.4)
+
+**Blocker:** F1 deep-review rule; shared code in util/.
+**Severity:** MEDIUM (architectural — the hasher has no auth-specific deps and is a textbook shared utility)
+**Surface:** `services/auth/.../infrastructure/security/PasswordHasher.java`
+**Proposed fix:** Move to `util/src/main/java/vn/vnpt/util/security/PasswordHasher.java`; inject from there. Customer service's eventual password flow (story out of scope) gets the same helper for free.
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — `/api/auth/service-token` endpoint is publicly callable (Story 5.5)
+
+**Blocker:** Endpoint mints credentials; current `AuthSecurityConfig` permitAll means anyone can hit it.
+**Severity:** HIGH (security — anonymous caller can mint a service-account JWT with arbitrary allowedRoles)
+**Surface:** `services/auth/.../infrastructure/web/AuthSecurityConfig.java:14-27`
+**Proposed fix:** Either (a) delete the config entirely and let Spring Security reject unauthenticated requests, then permit `/api/auth/register + /api/auth/login` only; or (b) keep it but protect `/api/auth/service-token` with mTLS or an `X-Internal-Token` header validated against Vault.
+**Status:** open — Epic 5 closure (flagged HIGH for the next auth follow-up story)
+
+## [Epic 5 closeout] 2026-07-09 — JWT verifier bean absent (Story 5.4 / 5.5)
+
+**Blocker:** JwtIssuer can sign but no consumer-side gate.
+**Severity:** HIGH (no enforcement today; the only thing preventing forgery is HMAC_JWT_SECRET secrecy)
+**Surface:** `services/auth/.../infrastructure/security/JwtIssuer.java` (missing pair)
+**Proposed fix:** Add a `JwtVerifier` bean (HMAC + `iss` + `exp` checks) parallel to `JwtIssuer`. Consumers across services should inject it for `@PreAuthorize`-style gating.
+**Status:** open — Epic 5 closure (flagged HIGH)
+
+## [Epic 5 closeout] 2026-07-09 — Email enumeration via 401/423/409 differentiation (Story 5.4)
+
+**Blocker:** Trivial mass-enumeration of registered emails.
+**Severity:** MEDIUM (defense in depth)
+**Surface:** `services/auth/.../application/web/AuthController.java:34-67`
+**Proposed fix:** Return identical status + body for unknown-email vs bad-password login; same for register (always return 200 with a generic "check your email" message).
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — `users.role` default `'user'` vs enum `USER` case mismatch (Story 5.4)
+
+**Blocker:** Direct SQL writes will silently corrupt role values.
+**Severity:** MEDIUM (latent — Hibernate path always writes 'USER'; direct SQL is the exposure)
+**Surface:** `services/auth/src/main/resources/db/migration/auth/V001__create_users_table.sql:10`
+**Proposed fix:** Add `CHECK (role IN ('USER','STAFF','ADMIN'))` to the table; drop the `'user'` default (any non-JPA write must specify role explicitly).
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — OrderPriceSnapshot has no userId column (Story 5.6)
+
+**Blocker:** Loyalty accrual from the saga needs a userId→customerId mapping; the snapshot has neither. The current saga advancer calls `accrueLoyaltyPointsUseCase.execute(orderUuid, 0L, totalCents)` as a placeholder (no-op accrual). The accrual endpoint remains the v1 entry point.
+**Severity:** HIGH (Story 5.6 AC #1 unmet: loyalty should fire on PAID)
+**Surface:** `services/order/.../infrastructure/entity/OrderPriceSnapshot.java` + V001 migration (genesis PLACED path)
+**Proposed fix:** Add `user_id BIGINT` column to V001 + capture userId on order placement. The saga advancer then resolves customerId via a local `user→customer` table or a customer-service HTTP lookup. Drop the `customerId=0` placeholder once the lookup lands.
+**Status:** partially-fixed (saga wired; accrual is a no-op until snapshot.userId lands) — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — Loyalty race: missing @Version on LoyaltyAccountEntity + accrual endpoint trusts caller (Story 5.6)
+
+**Blocker:** Two concurrent accruals race on the read-modify-write of `points`. Debug endpoint accepts arbitrary `customerId` + `totalCents` with no auth.
+**Severity:** HIGH (correctness + integrity)
+**Surface:** `services/order/.../infrastructure/entity/LoyaltyAccountEntity.java` (no @Version); `services/order/.../application/web/OrderController.java:157-166` (`accrue-loyalty` endpoint)
+**Proposed fix:** Add `@Version` to `LoyaltyAccountEntity` OR switch accrual to atomic SQL (`UPDATE loyalty_account SET points = points + ? WHERE customer_id = ?`). For the endpoint, either remove it (saga is the only entry once snapshot.userId lands) or guard with `@PreAuthorize("hasRole('INTERNAL')")` + read `totalCents` from the order's price snapshot (not the request).
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — LoyaltyAccrualEntity.points INT column caps ~21M points per order (Story 5.6)
+
+**Blocker:** 32-bit int overflow on large orders.
+**Severity:** LOW (theoretical; realistic order totals are < 10M VND)
+**Surface:** `services/order/.../infrastructure/entity/LoyaltyAccrualEntity.java:39` + `V004__create_loyalty_tables.sql`
+**Proposed fix:** Change column to BIGINT in a V005 migration. Update `AccrueLoyaltyPointsUseCase` to compute `points` as `long` instead of `(int)`.
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — Loyalty: missing AC #2 `pointsApplied` field (Story 5.6)
+
+**Blocker:** Story AC #2 requires `AppendOrderTransitionCommand.pointsApplied` so order effective total = totalCents - pointsApplied. Currently absent.
+**Severity:** MEDIUM (AC gap; redemption flow not implemented)
+**Surface:** `services/order/.../application/port/AppendOrderTransitionCommand.java:10-26`
+**Proposed fix:** Add `pointsApplied` field; wire to a future `RedeemLoyaltyPointsUseCase`; update `OrderPriceSnapshot` to capture the applied discount.
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — Pricebook.load() swallows exceptions (Story 5.7)
+
+**Blocker:** A missing/malformed `pricebook.json` makes the service boot with zero entries; every GET returns 404 with no startup warning.
+**Severity:** LOW (works today because the JSON is committed)
+**Surface:** `services/pricing/.../domain/Pricebook.java:40-50`
+**Proposed fix:** Throw on parse failure (fail-fast) instead of swallowing.
+**Status:** open — Epic 5 closure
+
+## [Epic 5 closeout] 2026-07-09 — Pricing has no controller-level test (Story 5.7)
+
+**Blocker:** Smoke covers the HTTP contract but no automated unit check.
+**Severity:** LOW (test coverage gap)
+**Surface:** `services/pricing/src/test/java/.../PricebookTest.java` (domain-only)
+**Proposed fix:** Add a `@WebMvcTest(PricingController.class)` test asserting 200/404 + JSON keys (`variantId`, `listPriceCents`, `currency`).
+**Status:** open — Epic 5 closure
+
+## [Epic 4 follow-up] 2026-07-09 — `OrderPortContractTest` removed; broader port-seam refactor deferred
+
+**Blocker:** The ArchUnit test added at 3c96f80 (Epic 4 MEDIUM sweep) was over-strict — it banned `application.usecase.. → infrastructure.repository..` for the entire order module even though order's use cases use Spring Data repos directly (mockable via Mockito, which the tests do). Payment enforces ports because payment has external service deps; order's repos are abstractions already. The test was never actually run by the orchestrator (only `mvn validate` was, which checks pom structure).
+**Severity:** MEDIUM (architectural debt; the rule was added at 3c96f80 but never enforced; 45 violations + 35 entity leaks existed at HEAD)
+**Surface:** `services/order/src/test/java/vn/vnpt/order/OrderPortContractTest.java` (deleted in Epic 5 closeout)
+**Proposed fix:** When order grows external service deps (e.g. cross-service customer lookup for loyalty), introduce proper `application/port/` interfaces for those — the strict rule will be useful then. The deleted test can be re-added with `@AllowExternalDependencies = "JpaRepository"` carve-out for now.
+**Status:** open — reclassify as a refactor story
+
+Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
+`/actuator/loggers` 404, variant-1 returns 200 + VND, variant-unknown 404).

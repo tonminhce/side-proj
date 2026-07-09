@@ -2,6 +2,7 @@ package vn.vnpt.order.application.usecase;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.vnpt.order.application.port.AppendOrderTransitionCommand;

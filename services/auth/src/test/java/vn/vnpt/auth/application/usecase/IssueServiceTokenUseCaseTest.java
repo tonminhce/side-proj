@@ -17,7 +17,7 @@ class IssueServiceTokenUseCaseTest {
 
   @BeforeEach
   void setUp() {
-    JwtIssuer jwt = new JwtIssuer(new ObjectMapper());
+    JwtIssuer jwt = new JwtIssuer(new ObjectMapper(), "dev");
     jwt.init();
     useCase = new IssueServiceTokenUseCase(jwt);
   }
