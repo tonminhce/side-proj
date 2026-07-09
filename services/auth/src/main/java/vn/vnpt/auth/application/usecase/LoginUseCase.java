@@ -13,7 +13,7 @@ import vn.vnpt.auth.domain.Role;
 import vn.vnpt.auth.infrastructure.entity.UserEntity;
 import vn.vnpt.auth.infrastructure.repository.UserRepository;
 import vn.vnpt.auth.infrastructure.security.JwtIssuer;
-import vn.vnpt.auth.infrastructure.security.PasswordHasher;
+import vn.vnpt.util.security.PasswordHasher;
 
 @Service
 @Transactional

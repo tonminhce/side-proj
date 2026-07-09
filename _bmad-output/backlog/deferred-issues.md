@@ -450,7 +450,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** MEDIUM (architectural — the hasher has no auth-specific deps and is a textbook shared utility)
 **Surface:** `services/auth/.../infrastructure/security/PasswordHasher.java`
 **Proposed fix:** Move to `util/src/main/java/vn/vnpt/util/security/PasswordHasher.java`; inject from there. Customer service's eventual password flow (story out of scope) gets the same helper for free.
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.11 (Move C). `util/src/main/java/vn/vnpt/util/security/PasswordHasher.java` created (kept `@Component` for cross-module Spring DI). Auth's LoginUseCase + RegisterUseCase + their tests re-wired to util import. Old `services/auth/.../security/PasswordHasher.java` + `PasswordHasherTest.java` deleted. Util 78/78 (was 74, +4 PasswordHasherTest cases); auth 28/28 unchanged.
 
 ## [Epic 5 closeout] 2026-07-09 — `/api/auth/service-token` endpoint is publicly callable (Story 5.5)
 
