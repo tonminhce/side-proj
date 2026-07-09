@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import vn.vnpt.order.infrastructure.entity.LoyaltyAccrualEntity;
 import vn.vnpt.order.infrastructure.entity.LoyaltyAccountEntity;
 import vn.vnpt.order.infrastructure.repository.LoyaltyAccountRepository;
@@ -34,9 +35,7 @@ class AccrueLoyaltyPointsUseCaseTest {
             .updatedAt(LocalDateTime.now()).build()));
     Mockito.when(accountRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    // totalCents=10000 → 10000/100 = 100 points
     int points = useCase.execute(42L, 99L, 10000L);
-
     assertThat(points).isEqualTo(100);
   }
 
@@ -51,9 +50,7 @@ class AccrueLoyaltyPointsUseCaseTest {
     });
 
     int points = useCase.execute(42L, 99L, 5000L);
-
     assertThat(points).isEqualTo(50);
-    // Verify save was called for the account creation
     Mockito.verify(accountRepo, Mockito.times(2)).save(any(LoyaltyAccountEntity.class));
   }
 
@@ -64,9 +61,39 @@ class AccrueLoyaltyPointsUseCaseTest {
             .points(100).createdAt(LocalDateTime.now()).build()));
 
     int points = useCase.execute(42L, 99L, 10000L);
-
-    // Returns 0; no save, no double-accrual.
     assertThat(points).isEqualTo(0);
     Mockito.verify(accountRepo, Mockito.never()).save(any());
+  }
+
+  @Test
+  void accrue_retriesOnceOnOptimisticLockFailure() {
+    Mockito.when(accrualRepo.findByOrderUuid(42L)).thenReturn(Optional.empty());
+    Mockito.when(accountRepo.findByCustomerId(99L)).thenReturn(Optional.of(
+        LoyaltyAccountEntity.builder().id(1L).customerId(99L).points(0L)
+            .updatedAt(LocalDateTime.now()).build()));
+    // First save throws (optimistic lock — version mismatch), second succeeds.
+    Mockito.when(accountRepo.save(any()))
+        .thenThrow(new ObjectOptimisticLockingFailureException(LoyaltyAccountEntity.class, 1L))
+        .thenAnswer(inv -> inv.getArgument(0));
+
+    int points = useCase.execute(42L, 99L, 10000L);
+    assertThat(points).isEqualTo(100);
+    Mockito.verify(accountRepo, Mockito.times(2)).save(any(LoyaltyAccountEntity.class));
+  }
+
+  @Test
+  void accrue_surfacesLockFailureAfterSingleRetry() {
+    Mockito.when(accrualRepo.findByOrderUuid(42L)).thenReturn(Optional.empty());
+    Mockito.when(accountRepo.findByCustomerId(99L)).thenReturn(Optional.of(
+        LoyaltyAccountEntity.builder().id(1L).customerId(99L).points(0L)
+            .updatedAt(LocalDateTime.now()).build()));
+    Mockito.when(accountRepo.save(any()))
+        .thenThrow(new ObjectOptimisticLockingFailureException(LoyaltyAccountEntity.class, 1L));
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+        () -> useCase.execute(42L, 99L, 10000L))
+        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    // 2 saves: initial + 1 retry. Beyond that the exception propagates.
+    Mockito.verify(accountRepo, Mockito.times(2)).save(any(LoyaltyAccountEntity.class));
   }
 }

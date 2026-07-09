@@ -498,7 +498,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** HIGH (correctness + integrity)
 **Surface:** `services/order/.../infrastructure/entity/LoyaltyAccountEntity.java` (no @Version); `services/order/.../application/web/OrderController.java:157-166` (`accrue-loyalty` endpoint)
 **Proposed fix:** Add `@Version` to `LoyaltyAccountEntity` OR switch accrual to atomic SQL (`UPDATE loyalty_account SET points = points + ? WHERE customer_id = ?`). For the endpoint, either remove it (saga is the only entry once snapshot.userId lands) or guard with `@PreAuthorize("hasRole('INTERNAL')")` + read `totalCents` from the order's price snapshot (not the request).
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.9 (Move B). V006 migration adds `version BIGINT NOT NULL DEFAULT 0` to loyalty_account. @Version on LoyaltyAccountEntity. AccrueLoyaltyPointsUseCase catches ObjectOptimisticLockingFailureException and retries once. POST /api/orders/{orderUuid}/accrue-loyalty now sources totalCents from OrderPriceSnapshot (FR-31 immutability) — unknown orders → 404. Saga path (PaymentCapturedOrderAdvancer) unaffected (use case signature unchanged). 66/66 order tests green (was 61, +5).
 
 ## [Epic 5 closeout] 2026-07-09 — LoyaltyAccrualEntity.points INT column caps ~21M points per order (Story 5.6)
 

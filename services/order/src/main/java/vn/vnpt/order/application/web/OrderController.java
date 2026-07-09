@@ -24,6 +24,7 @@ import vn.vnpt.order.application.usecase.GetLoyaltyForOrderUseCase;
 import vn.vnpt.order.application.usecase.GetOrderTimelineUseCase;
 import vn.vnpt.order.domain.OrderState;
 import vn.vnpt.order.infrastructure.entity.OrderStateTransition;
+import vn.vnpt.order.infrastructure.repository.OrderPriceSnapshotRepository;
 import vn.vnpt.order.infrastructure.repository.OrderStateTransitionRepository;
 
 /**
@@ -48,6 +49,7 @@ public class OrderController {
   private final GetLoyaltyForOrderUseCase getLoyaltyForOrderUseCase;
   private final AccrueLoyaltyPointsUseCase accrueLoyaltyPointsUseCase;
   private final OrderStateTransitionRepository transitionRepository;
+  private final OrderPriceSnapshotRepository snapshotRepository;
 
   public OrderController(
       AppendOrderTransitionUseCase appendUseCase,
@@ -58,7 +60,8 @@ public class OrderController {
       GetLoyaltyAccountUseCase getLoyaltyAccountUseCase,
       GetLoyaltyForOrderUseCase getLoyaltyForOrderUseCase,
       AccrueLoyaltyPointsUseCase accrueLoyaltyPointsUseCase,
-      OrderStateTransitionRepository transitionRepository) {
+      OrderStateTransitionRepository transitionRepository,
+      OrderPriceSnapshotRepository snapshotRepository) {
     this.appendUseCase = appendUseCase;
     this.advanceUseCase = advanceUseCase;
     this.amendUseCase = amendUseCase;
@@ -68,6 +71,7 @@ public class OrderController {
     this.getLoyaltyForOrderUseCase = getLoyaltyForOrderUseCase;
     this.accrueLoyaltyPointsUseCase = accrueLoyaltyPointsUseCase;
     this.transitionRepository = transitionRepository;
+    this.snapshotRepository = snapshotRepository;
   }
 
   @PostMapping
@@ -153,15 +157,25 @@ public class OrderController {
         "updatedAt", account.getUpdatedAt().toString()));
   }
 
-  /** Story 5.6 / FR-50 — internal accrual hook (called by the saga on PAID). */
+  /** Story 5.6 / FR-50 — internal accrual hook (called by the saga on PAID).
+   *  Trust boundary fix: totalCents now comes from the immutable order_price_snapshot
+   *  (FR-31 contract) rather than the request body. customerId is supplied by the saga
+   *  (the only legitimate caller); unknown orders → 404. The accrual row's
+   *  UNIQUE(order_uuid) prevents re-fire even if this endpoint is called twice.
+   *  ponytail: snapshot is the source of truth — upgrade to drop customerId too once
+   *  OrderPriceSnapshot.user_id lands (Story 5.6 follow-up). */
   @PostMapping("/{orderUuid}/accrue-loyalty")
   public ResponseEntity<Map<String, Object>> accrueLoyalty(
       @PathVariable long orderUuid,
-      @RequestParam long customerId,
-      @RequestParam long totalCents) {
-    int points = accrueLoyaltyPointsUseCase.execute(orderUuid, customerId, totalCents);
+      @RequestParam long customerId) {
+    var snapshot = snapshotRepository.findById(orderUuid)
+        .orElseThrow(() -> new IllegalArgumentException(
+            "no price snapshot for orderUuid=" + orderUuid + " (FR-31 immutability requires one)"));
+    int points = accrueLoyaltyPointsUseCase.execute(orderUuid, customerId, snapshot.getTotalCents());
     return ResponseEntity.ok(Map.of(
         "orderUuid", orderUuid,
+        "customerId", customerId,
+        "totalCents", snapshot.getTotalCents(),
         "points", points));
   }
 }

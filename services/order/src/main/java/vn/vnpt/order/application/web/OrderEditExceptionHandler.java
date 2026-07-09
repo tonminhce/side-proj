@@ -33,4 +33,13 @@ public class OrderEditExceptionHandler {
         "error", "terminal_state",
         "message", e.getMessage()));
   }
+
+  /** Move B — missing price snapshot for an unknown orderUuid → 404. The accrue-loyalty
+   *  endpoint sources totalCents from the snapshot; an unknown order has no snapshot. */
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<Map<String, Object>> handleUnknownOrder(IllegalArgumentException e) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+        "error", "unknown_order",
+        "message", e.getMessage()));
+  }
 }
