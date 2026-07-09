@@ -27,6 +27,25 @@ preflightRequirements: '../data/preflight-requirements.md'
 
 ---
 
+## 🚨 BEFORE STARTING: Schema Validation Gate
+
+**CRITICAL:** A v0-schema state document silently broke Epic 3 (retro at `_bmad-output/implementation-artifacts/epic-3-retrospective.md`). If a previous session's state doc is being resumed in this run, validate it BEFORE any state load or mutation. See `step-01b-continue.md` for the same gate on the resume path; the validation logic is identical.
+
+**If a `state_file` is in scope for this run** (e.g. user passed `--resume <path>`, or the latest-incomplete helper found one), run the v1-schema checks:
+
+1. Frontmatter has `# Orchestration State Document` heading on line 2 (v0 = `epic:` on line 2).
+2. `policyVersion: 1` is present.
+3. `agentConfig.perTask` is block-style YAML (v0 = flow-style `{retro:}`).
+4. `complexityFile` points to a JSON ≥ 100 bytes (v0 = 0 bytes, preflight was bypassed).
+5. `currentStep` is a known step-file name, or `null`, or `done`.
+6. `deviationNote` field absent (Epic 3's self-flag).
+
+**On any failure:** print the offending signal, recommend the direct-cycle fallback (CLAUDE.md / `epic-3-retrospective.md` "Direct cycle path"), and **HALT** before `parse-epic` runs. Do not auto-purge the file.
+
+Skip this gate entirely if no prior state doc is in scope (fresh init, no resume flag).
+
+---
+
 ## Do
 
 ### 1. Confirm Epic File
