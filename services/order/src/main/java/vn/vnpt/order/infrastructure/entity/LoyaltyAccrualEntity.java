@@ -36,7 +36,7 @@ public class LoyaltyAccrualEntity {
   private Long customerId;
 
   @Column(name = "points", nullable = false)
-  private Integer points;
+  private Long points;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;

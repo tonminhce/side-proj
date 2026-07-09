@@ -31,14 +31,14 @@ public class AccrueLoyaltyPointsUseCase {
     this.accrualRepository = accrualRepository;
   }
 
-  public int execute(long orderUuid, long customerId, long totalCents) {
+  public long execute(long orderUuid, long customerId, long totalCents) {
     // Idempotency: if an accrual row already exists for this order, skip — fast path.
     if (accrualRepository.findByOrderUuid(orderUuid).isPresent()) {
-      return 0;
+      return 0L;
     }
-    int points = (int) (totalCents / 100);
+    long points = totalCents / 100;  // V008 widened to long (no overflow on realistic order totals)
     if (points == 0) {
-      return 0;
+      return 0L;
     }
     try {
       return applyOnce(orderUuid, customerId, points);
@@ -49,7 +49,7 @@ public class AccrueLoyaltyPointsUseCase {
     }
   }
 
-  private int applyOnce(long orderUuid, long customerId, int points) {
+  private long applyOnce(long orderUuid, long customerId, long points) {
     LoyaltyAccountEntity account = accountRepository.findByCustomerId(customerId)
         .orElseGet(() -> accountRepository.save(LoyaltyAccountEntity.builder()
             .customerId(customerId)

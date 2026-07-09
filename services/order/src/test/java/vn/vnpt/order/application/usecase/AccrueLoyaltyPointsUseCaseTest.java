@@ -35,7 +35,7 @@ class AccrueLoyaltyPointsUseCaseTest {
             .updatedAt(LocalDateTime.now()).build()));
     Mockito.when(accountRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    int points = useCase.execute(42L, 99L, 10000L);
+    int points = (int) useCase.execute(42L, 99L, 10000L);
     assertThat(points).isEqualTo(100);
   }
 
@@ -49,7 +49,7 @@ class AccrueLoyaltyPointsUseCaseTest {
       return e;
     });
 
-    int points = useCase.execute(42L, 99L, 5000L);
+    int points = (int) useCase.execute(42L, 99L, 5000L);
     assertThat(points).isEqualTo(50);
     Mockito.verify(accountRepo, Mockito.times(2)).save(any(LoyaltyAccountEntity.class));
   }
@@ -58,9 +58,9 @@ class AccrueLoyaltyPointsUseCaseTest {
   void accrue_idempotentForDuplicateOrder() {
     Mockito.when(accrualRepo.findByOrderUuid(42L)).thenReturn(Optional.of(
         LoyaltyAccrualEntity.builder().id(1L).orderUuid(42L).customerId(99L)
-            .points(100).createdAt(LocalDateTime.now()).build()));
+            .points(100L).createdAt(LocalDateTime.now()).build()));
 
-    int points = useCase.execute(42L, 99L, 10000L);
+    int points = (int) useCase.execute(42L, 99L, 10000L);
     assertThat(points).isEqualTo(0);
     Mockito.verify(accountRepo, Mockito.never()).save(any());
   }
@@ -76,7 +76,7 @@ class AccrueLoyaltyPointsUseCaseTest {
         .thenThrow(new ObjectOptimisticLockingFailureException(LoyaltyAccountEntity.class, 1L))
         .thenAnswer(inv -> inv.getArgument(0));
 
-    int points = useCase.execute(42L, 99L, 10000L);
+    int points = (int) useCase.execute(42L, 99L, 10000L);
     assertThat(points).isEqualTo(100);
     Mockito.verify(accountRepo, Mockito.times(2)).save(any(LoyaltyAccountEntity.class));
   }

@@ -110,7 +110,7 @@ public class PaymentCapturedOrderAdvancer {
           // v1: snapshot.userId IS the customerId (auth's users.customer_id == userId).
           // Forward-compat: replace with a user→customer cross-service lookup if the key
           // model diverges.
-          int accrued = accrueLoyaltyPointsUseCase.execute(event.orderUuid(), userId, snapshot.getTotalCents());
+          long accrued = accrueLoyaltyPointsUseCase.execute(event.orderUuid(), userId, snapshot.getTotalCents());
           if (accrued == 0) {
             log.debug("Loyalty accrual returned 0 points for orderUuid={} (customerId={})",
                 event.orderUuid(), userId);

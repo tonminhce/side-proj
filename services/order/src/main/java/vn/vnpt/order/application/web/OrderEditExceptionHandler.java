@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import vn.vnpt.order.domain.exception.OrderEditWindowClosedException;
+import vn.vnpt.order.domain.exception.OrderSnapshotMissingException;
 import vn.vnpt.order.domain.exception.OrderTerminalStateException;
 import vn.vnpt.order.domain.exception.OrderVersionMismatchException;
 
@@ -34,10 +35,12 @@ public class OrderEditExceptionHandler {
         "message", e.getMessage()));
   }
 
-  /** Move B — missing price snapshot for an unknown orderUuid → 404. The accrue-loyalty
-   *  endpoint sources totalCents from the snapshot; an unknown order has no snapshot. */
-  @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, Object>> handleUnknownOrder(IllegalArgumentException e) {
+  /** Story 5.10 / Move A — accrue-loyalty endpoint + saga listener both throw this when
+   *  an orderUuid has no price snapshot. Targeted handler → 404 (not the broad
+   *  IllegalArgumentException catch that Move B added — that handler was removed when the
+   *  OrderController.accrueLoyalty site switched to the dedicated type). */
+  @ExceptionHandler(OrderSnapshotMissingException.class)
+  public ResponseEntity<Map<String, Object>> handleSnapshotMissing(OrderSnapshotMissingException e) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
         "error", "unknown_order",
         "message", e.getMessage()));

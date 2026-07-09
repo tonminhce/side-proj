@@ -506,7 +506,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** LOW (theoretical; realistic order totals are < 10M VND)
 **Surface:** `services/order/.../infrastructure/entity/LoyaltyAccrualEntity.java:39` + `V004__create_loyalty_tables.sql`
 **Proposed fix:** Change column to BIGINT in a V005 migration. Update `AccrueLoyaltyPointsUseCase` to compute `points` as `long` instead of `(int)`.
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.12. V008 widens loyalty_accrual.points INT→BIGINT. LoyaltyAccrualEntity.points Integer→Long. AccrueLoyaltyPointsUseCase.execute returns long; saga + controller callers updated; tests updated.
 
 ## [Epic 5 closeout] 2026-07-09 — Loyalty: missing AC #2 `pointsApplied` field (Story 5.6)
 
@@ -514,7 +514,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** MEDIUM (AC gap; redemption flow not implemented)
 **Surface:** `services/order/.../application/port/AppendOrderTransitionCommand.java:10-26`
 **Proposed fix:** Add `pointsApplied` field; wire to a future `RedeemLoyaltyPointsUseCase`; update `OrderPriceSnapshot` to capture the applied discount.
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.12. AppendOrderTransitionCommand.pointsApplied nullable Long field added with backward-compat ctor (existing 4-arg callers default to null). Compact constructor validates pointsApplied >= 0. Future RedeemLoyaltyPointsUseCase + OrderPriceSnapshot.pointsApplied wire-up remains a separate story.
 
 ## [Epic 5 closeout] 2026-07-09 — Pricebook.load() swallows exceptions (Story 5.7)
 
@@ -522,7 +522,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** LOW (works today because the JSON is committed)
 **Surface:** `services/pricing/.../domain/Pricebook.java:40-50`
 **Proposed fix:** Throw on parse failure (fail-fast) instead of swallowing.
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.12. Pricebook.load() now throws IllegalStateException with descriptive message on missing/malformed pricebook.json (ADR-20 fail-loud parity). load() made public for cross-package test access. PricebookTest.load_failsLoud proves the contract.
 
 ## [Epic 5 closeout] 2026-07-09 — Pricing has no controller-level test (Story 5.7)
 
@@ -530,7 +530,7 @@ Smoke now passes end-to-end (port 8090, `/actuator/health` UP,
 **Severity:** LOW (test coverage gap)
 **Surface:** `services/pricing/src/test/java/.../PricebookTest.java` (domain-only)
 **Proposed fix:** Add a `@WebMvcTest(PricingController.class)` test asserting 200/404 + JSON keys (`variantId`, `listPriceCents`, `currency`).
-**Status:** open — Epic 5 closure
+**Status:** fixed-in-commit-<pending> (2026-07-09) — Story 5.12. PricingControllerTest: 2 cases (200 known variant with full JSON shape + 404 unknown). Pricing 6/6 (was 3, +3).
 
 ## [Epic 4 follow-up] 2026-07-09 — `OrderPortContractTest` removed; broader port-seam refactor deferred
 

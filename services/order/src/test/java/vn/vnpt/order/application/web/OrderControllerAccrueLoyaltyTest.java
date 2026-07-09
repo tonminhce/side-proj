@@ -64,7 +64,7 @@ class OrderControllerAccrueLoyaltyTest {
             .currency("VND")
             .capturedAt(java.time.LocalDateTime.now())
             .build()));
-    when(accrueUseCase.execute(anyLong(), anyLong(), anyLong())).thenReturn(115);
+    when(accrueUseCase.execute(anyLong(), anyLong(), anyLong())).thenReturn(115L);
 
     // Request only carries customerId; totalCents comes from snapshot.
     mockMvc.perform(post("/api/orders/42/accrue-loyalty").param("customerId", "99"))

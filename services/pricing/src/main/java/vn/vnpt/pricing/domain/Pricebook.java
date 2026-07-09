@@ -31,7 +31,7 @@ public class Pricebook {
   }
 
   @PostConstruct
-  void load() {
+  public void load() {
     try (InputStream in = new ClassPathResource("pricebook.json").getInputStream()) {
       Seed seed = objectMapper.readValue(in, Seed.class);
       Instant now = Instant.now();
@@ -43,7 +43,10 @@ public class Pricebook {
       }
       log.info("Pricebook loaded: {} entries", entries.size());
     } catch (Exception e) {
-      log.error("Failed to load pricebook.json", e);
+      // Fail-fast (Epic 5 polish): a missing or malformed pricebook.json is a deploy error.
+      // Swallowing it would let the service boot with zero entries and every GET returns 404
+      // with no startup warning. ADR-20 parity: fail loud, don't degrade silently.
+      throw new IllegalStateException("Failed to load pricebook.json — refusing to boot with empty pricebook", e);
     }
   }
 

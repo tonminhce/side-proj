@@ -23,6 +23,7 @@ import vn.vnpt.order.application.usecase.GetLoyaltyAccountUseCase;
 import vn.vnpt.order.application.usecase.GetLoyaltyForOrderUseCase;
 import vn.vnpt.order.application.usecase.GetOrderTimelineUseCase;
 import vn.vnpt.order.domain.OrderState;
+import vn.vnpt.order.domain.exception.OrderSnapshotMissingException;
 import vn.vnpt.order.infrastructure.entity.OrderStateTransition;
 import vn.vnpt.order.infrastructure.repository.OrderPriceSnapshotRepository;
 import vn.vnpt.order.infrastructure.repository.OrderStateTransitionRepository;
@@ -169,9 +170,8 @@ public class OrderController {
       @PathVariable long orderUuid,
       @RequestParam long customerId) {
     var snapshot = snapshotRepository.findById(orderUuid)
-        .orElseThrow(() -> new IllegalArgumentException(
-            "no price snapshot for orderUuid=" + orderUuid + " (FR-31 immutability requires one)"));
-    int points = accrueLoyaltyPointsUseCase.execute(orderUuid, customerId, snapshot.getTotalCents());
+        .orElseThrow(() -> new OrderSnapshotMissingException(orderUuid));
+    long points = accrueLoyaltyPointsUseCase.execute(orderUuid, customerId, snapshot.getTotalCents());
     return ResponseEntity.ok(Map.of(
         "orderUuid", orderUuid,
         "customerId", customerId,

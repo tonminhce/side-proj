@@ -52,7 +52,7 @@ class PaymentCapturedOrderAdvancerTest {
         transitionRepo, priceRepo, appendUseCase, verifier, accrueLoyaltyUseCase, meterRegistry);
     when(verifier.verifyPaymentEventEnvelope(anyLong(), any(), any(), anyLong(), any(), any()))
         .thenReturn(true);
-    when(accrueLoyaltyUseCase.execute(anyLong(), anyLong(), anyLong())).thenReturn(0);
+    when(accrueLoyaltyUseCase.execute(anyLong(), anyLong(), anyLong())).thenReturn(0L);
   }
 
   @Test
