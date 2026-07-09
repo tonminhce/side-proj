@@ -94,7 +94,7 @@ Format per entry:
 **Severity:** HIGH (AC #7 violation; smoke is the only thing that proves the filter works)
 **Surface:** `services/gateway/src/test/java/vn/vnpt/gateway/filter/` (does not exist)
 **Proposed fix:** Write the 5 filter tests with `@SpringBootTest(classes = TestConfig.class)` mirroring the Lua-test pattern (minimal config, bypass full GatewayApplication), assert Redis keys + response status + headers via a real `WebTestClient`.
-**Status:** fixed-in-commit-<pending> (2026-07-08)
+**Status:** fixed-in-commit-91670b7 (2026-07-08) — Epic 3 cycle 3 retro
 
 ### Resolution (Story 3.4 follow-up cycle 3)
 
@@ -138,7 +138,7 @@ Total: 6 tests, all green. AC #7 / HIGH-2 fully resolved.
 **Severity:** HIGH (FR-82 / AT-03 contract requires both producer AND consumer-side signing)
 **Surface:** `services/checkout/.../infrastructure/outbox/` (consuming listener — file name TBD)
 **Proposed fix:** Add a consumer-side `HmacEventVerifier` util that reads the producer's secret from Vault (cached 5 min), recomputes HMAC over the canonical JSON, and rejects events with mismatched signatures. Wire into checkout's `@ApplicationModuleListener` for `payment.captured` / `payment.refunded` events.
-**Status:** **blocked-by-missing-producer** (2026-07-08 re-assessment)
+**Status:** **wontfix-intra-jvm** — see Story 3.5 follow-up #3 below. Producer ships; verifier class is ready (4 tests green); the listener cannot read the in-process Spring event's `signatures` column without changing the event record shape. Decision: verifier stands ready for the future cross-service Kafka consumer in checkout; the intra-JVM leg is trusted (same JVM, same trust boundary).
 
 ### Re-assessment (2026-07-08 cycle 2)
 
@@ -236,7 +236,7 @@ refunds; reconciliation needs to learn about refunds to update ledger / emit ref
 that looks up the order by `paymentIntentId` (new repository method
 `OrderRepository.findByPaymentIntentId`) and appends a `REFUNDED` transition via the existing
 `AppendOrderTransitionUseCase`. ~40 lines + 2 tests.
-**Status:** fixed-in-commit-<pending> (2026-07-08 cycle 6)
+**Status:** fixed-in-commit-c1062be (2026-07-08 cycle 6)
 
 ### Resolution (cycle 6)
 
@@ -271,7 +271,7 @@ producer now reliably populates `orderUuid`, so the consumer can use the existin
 **Severity:** HIGH (FR-27 contract)
 **Surface:** `services/payment/.../infrastructure/stripe/RealStripePaymentAdapter.java:46-58` (the `authorize(...)` method)
 **Proposed fix:** Add `country` (String, 2-letter ISO-3166-1 alpha-2 nullable) + `riskLevel` (enum) to `AuthorizePaymentCommand`; add the 3DS decision branch in `authorize(...)`; surface `intent.getNextAction().getRedirectToUrl().getUrl()` (verify the 28.x path) as a new `PaymentResult.requiresActionUrl` field.
-**Status:** fixed-in-commit-<pending> (2026-07-08)
+**Status:** fixed-in-commit-85c2710 (2026-07-08) — Story 3.5 3DS follow-up
 
 ### Resolution (Story 3.5 follow-up cycle)
 
@@ -311,7 +311,7 @@ producer now reliably populates `orderUuid`, so the consumer can use the existin
 **Severity:** HIGH (FR-32 contract)
 **Surface:** `services/order/.../application/usecase/AppendOrderTransitionUseCase.java` (saga listener to be added)
 **Proposed fix:** Add a `@ApplicationModuleListener` that consumes `PaymentCapturedEvent` from the payment service's outbox bridge + invokes the existing `AppendOrderTransitionUseCase` with `OrderState.PAID`. Verify with an end-to-end smoke that posts a payment webhook and asserts the order_state_transition log has both PLACED + PAID rows.
-**Status:** **resolved-by-event-bridge (commit pending)**
+**Status:** **resolved-by-event-bridge (commit 9e0105f)**
 
 ### Re-assessment 2026-07-09 — structural finding (audit + plan)
 
